@@ -1,0 +1,3 @@
+soul-knight-data-processing
+PySide6>=6.6
+pycryptodome

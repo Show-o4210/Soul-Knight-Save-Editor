@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Soul Knight Save Editor specific ignores
+/输入/*
+!/输入/.gitkeep
+/输出/*
+!/输出/.gitkeep
+/tests/_test_v2_output/
+/tests/_test_v3_output/
