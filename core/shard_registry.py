@@ -28,7 +28,8 @@ SHARD_SPECS: dict[str, ShardSpec] = {
     "monsrise_data": ShardSpec("monsrise_data", "des_iambo", inspect_only=True),
     "misc_data": ShardSpec("misc_data", "des_iambo", inspect_only=True),
     "mall_reload_data": ShardSpec("mall_reload_data", "des_iambo", inspect_only=True),
-    "battles": ShardSpec("battles", "des_iambo", inspect_only=True),
+    # battles 为明文 JSON（与 core.crypto.PLAINTEXT_TYPES 一致；非 DES）
+    "battles": ShardSpec("battles", "plain", inspect_only=True),
     "sandbox_config": ShardSpec("sandbox_config", "plain", inspect_only=True),
     "sandbox_maps": ShardSpec("sandbox_maps", "plain", inspect_only=True),
 }

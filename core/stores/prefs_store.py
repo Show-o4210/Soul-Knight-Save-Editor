@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-from core.constants import PREFS_NAME
+from core.constants import (
+    DEVICE_PREFS_GLOB_HINT,
+    DEVICE_SHARED_PREFS_DIR,
+    PREFS_NAME,
+    format_missing_file,
+)
 
 UID_KEY_RE = re.compile(r"^(\d+)_c\d+_unlock$")
 
@@ -468,7 +473,12 @@ def discover_prefs(input_dir: Path) -> Path:
         return candidates[0]
     if candidates:
         return max(candidates, key=lambda p: p.stat().st_size)
-    raise FileNotFoundError(f"未找到 playerprefs.xml: {input_dir}")
+    raise FileNotFoundError(
+        f"{format_missing_file(PREFS_NAME, reason='识别账号 UID 的硬依赖')}\n"
+        f"  当前「输入」目录: {input_dir}\n"
+        f"  （也可用同目录任意 *playerprefs*.xml / 唯一的 *.xml）\n"
+        f"  手机目录: {DEVICE_SHARED_PREFS_DIR}/ · {DEVICE_PREFS_GLOB_HINT}"
+    )
 
 
 def detect_uid(prefs_path: Path) -> str:

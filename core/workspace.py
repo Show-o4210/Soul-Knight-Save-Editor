@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.constants import PREFS_NAME
+from core.constants import DEVICE_FILES_DIR, PREFS_NAME, format_missing_file_compact
 from core.crypto import decrypt_file
 from core.input_rules import audit_input
 from core.reference_diff import compute_reference_diff
@@ -21,7 +21,7 @@ from core.weapon_util import filter_weapon_blueprints
 class WorkspaceSnapshot:
     uid: str
     input_dir: str
-    game_path: str
+    game_path: str | None
     prefs_path: str
     item_path: str | None
     setting_path: str | None
@@ -52,6 +52,7 @@ class WorkspaceSnapshot:
     ref_weapon_loaded: bool = False
     ref_statistic_loaded: bool = False
     statistic_loaded: bool = False
+    game_loaded: bool = False
 
 
 class SaveWorkspace:
@@ -66,6 +67,7 @@ class SaveWorkspace:
         self.weapon_evolution_path: Path | None = None
         self.statistic_path: Path | None = None
         self.shard_paths: dict[str, Path | None] = {}
+        self.game_loaded: bool = False
         self._game: GameDataStore | None = None
         self._prefs: PlayerPrefsStore | None = None
         self._item: ItemDataStore | None = None
@@ -82,21 +84,38 @@ class SaveWorkspace:
         if not self.input_dir.is_dir():
             raise FileNotFoundError(f"输入目录不存在: {self.input_dir}")
 
-        self.game_path = self.input_dir / "game.data"
-        if not self.game_path.is_file():
-            raise FileNotFoundError(f"未找到 game.data: {self.input_dir}")
+        warnings: list[str] = []
 
+        # prefs 是识别 UID 的硬依赖；game.data 可缺（分片编辑仍可用）
         self.prefs_path = discover_prefs(self.input_dir)
         self.uid = detect_uid(self.prefs_path)
-
-        self._game = GameDataStore.load(self.game_path)
         self._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid)
+
+        candidate_game = self.input_dir / "game.data"
+        if candidate_game.is_file():
+            self.game_path = candidate_game
+            self._game = GameDataStore.load(self.game_path)
+            self.game_loaded = True
+        else:
+            self.game_path = None
+            self._game = GameDataStore({}, None)
+            self.game_loaded = False
+            warnings.append(
+                f"{format_missing_file_compact('game.data', reason='角色/皮肤/宠物/客厅无法编辑')}；"
+                f"材料/花圃/武器分片仍可从 item/statistic 载入（{DEVICE_FILES_DIR}/）"
+            )
 
         self.item_path = discover_shard_path(self.input_dir, "item_data", self.uid)
         if self.item_path:
             self._item = ItemDataStore.load(self.item_path)
-        else:
+        elif self.game_loaded:
             self._item = ItemDataStore.from_game_mirror(self._game.data)
+        else:
+            self._item = ItemDataStore({})
+            warnings.append(
+                f"{format_missing_file_compact(f'item_data_{self.uid}_.data', reason='且无 game.data 可镜像')}；"
+                "材料/花圃为空"
+            )
 
         self.setting_path = discover_shard_path(self.input_dir, "setting", self.uid)
         if self.setting_path:
@@ -134,13 +153,18 @@ class SaveWorkspace:
 
         xml_gems_raw = prefs.get(f"{self.uid}_gems")
         xml_gems = int(xml_gems_raw) if xml_gems_raw is not None else None
-        game_gems = self._game.data.get("gems")
-        warnings: list[str] = []
-        if self.uid and prefs.get(f"OpenRijTest_{self.uid}") not in (None, "0", 0):
-            warnings.append("OpenRijTest 非 0 或缺失，改物品时将强制 Legacy")
-        elif prefs.get(f"OpenRijTest_{self.uid}") is None:
+        game_gems = self._game.data.get("gems") if self.game_loaded else None
+        rij = prefs.get(f"OpenRijTest_{self.uid}")
+        if rij is None:
             warnings.append("XML 缺少 OpenRijTest，改物品时将写入 0")
-        if xml_gems is not None and game_gems is not None and int(xml_gems) != int(game_gems):
+        elif rij not in ("0", 0):
+            warnings.append("OpenRijTest 非 0，改物品时将强制 Legacy")
+        if (
+            self.game_loaded
+            and xml_gems is not None
+            and game_gems is not None
+            and int(xml_gems) != int(game_gems)
+        ):
             warnings.append(
                 f"宝石双轨不同步：game.data={game_gems}，XML={xml_gems}（工具不修改 gems）"
             )
@@ -161,7 +185,7 @@ class SaveWorkspace:
         return WorkspaceSnapshot(
             uid=self.uid,
             input_dir=str(self.input_dir),
-            game_path=str(self.game_path),
+            game_path=str(self.game_path) if self.game_path else None,
             prefs_path=str(self.prefs_path),
             item_path=str(self.item_path) if self.item_path else None,
             setting_path=str(self.setting_path) if self.setting_path else None,
@@ -199,6 +223,7 @@ class SaveWorkspace:
             ref_item_loaded=self._ref_item is not None,
             ref_weapon_loaded=self._ref_weapon_evolution is not None,
             ref_statistic_loaded=self._ref_statistic is not None,
+            game_loaded=self.game_loaded,
             statistic_loaded=self.statistic_path is not None,
         )
 
@@ -321,9 +346,16 @@ class SaveWorkspace:
         ws.weapon_evolution_path = self.weapon_evolution_path
         ws.statistic_path = self.statistic_path
         ws.shard_paths = dict(self.shard_paths)
-        ws._game = GameDataStore(json.loads(json.dumps(self._game.data)), self.game_path)
+        ws.game_loaded = self.game_loaded
+        ws._game = GameDataStore(
+            json.loads(json.dumps(self._game.data if self._game else {})),
+            self.game_path,
+        )
         ws._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid or "")
-        ws._item = ItemDataStore(json.loads(json.dumps(self._item.data)), self.item_path)
+        ws._item = ItemDataStore(
+            json.loads(json.dumps(self._item.data if self._item else {})),
+            self.item_path,
+        )
         ws._setting_data = (
             json.loads(json.dumps(self._setting_data)) if self._setting_data else None
         )

@@ -4,7 +4,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from core.constants import DUPLICATE_BASENAMES, PREFS_NAME
+from core.constants import (
+    DEVICE_FILES_DIR,
+    DEVICE_PREFS_GLOB_HINT,
+    DEVICE_SHARED_PREFS_DIR,
+    DUPLICATE_BASENAMES,
+    PREFS_NAME,
+    format_missing_file_compact,
+)
 from core.shard_registry import WRITABLE_SHARDS, shard_filename
 
 CORE_FILES = ("game.data", PREFS_NAME)
@@ -25,12 +32,22 @@ class InputAudit:
     junk: list[str] = field(default_factory=list)
     redundant: list[str] = field(default_factory=list)
     missing_for_plan: list[str] = field(default_factory=list)
+    # 缺失的必备文件（文件名列表，便于 GUI 定位）
+    missing_core: list[str] = field(default_factory=list)
 
     def summary_lines(self) -> list[str]:
-        lines = ["【必备】"]
+        lines = [
+            "【手机源路径】",
+            f"  .data 分片 → {DEVICE_FILES_DIR}/",
+            f"  PlayerPrefs XML → {DEVICE_SHARED_PREFS_DIR}/",
+            f"  XML 文件名 → {DEVICE_PREFS_GLOB_HINT}",
+            "【必备】",
+        ]
         for name in CORE_FILES:
-            mark = "✓" if name in self.present_core else "✗ 缺失"
-            lines.append(f"  {mark}  {name}")
+            if name in self.present_core:
+                lines.append(f"  ✓  {name}")
+            else:
+                lines.append(f"  ✗  {format_missing_file_compact(name)}")
         if self.present_optional:
             lines.append("【已放入的可选】")
             for n in self.present_optional:
@@ -87,12 +104,21 @@ def _is_junk(path: Path) -> bool:
 def audit_input(input_dir: Path, uid: str, *, needs_item: bool = False, needs_shards: list[str] | None = None) -> InputAudit:
     audit = InputAudit(uid=uid)
     if not input_dir.is_dir():
+        audit.missing_core = list(CORE_FILES)
         return audit
 
     names = {p.name for p in input_dir.iterdir() if p.is_file()}
     for core in CORE_FILES:
         if core in names:
             audit.present_core.append(core)
+        else:
+            # prefs 允许类似命名的 xml 顶替
+            if core == PREFS_NAME:
+                xmls = [n for n in names if n.lower().endswith(".xml")]
+                if xmls:
+                    audit.present_core.append(core)
+                    continue
+            audit.missing_core.append(core)
 
     item_name = shard_filename("item_data", uid)
     setting_name = shard_filename("setting", uid)
@@ -114,14 +140,18 @@ def audit_input(input_dir: Path, uid: str, *, needs_item: bool = False, needs_sh
             audit.junk.append(p.name)
 
     if needs_item and item_name not in names:
-        audit.missing_for_plan.append(f"{item_name}（改物品请放入输入）")
+        audit.missing_for_plan.append(
+            format_missing_file_compact(item_name, reason="改物品请放入输入")
+        )
 
     for dtype in needs_shards or []:
         if dtype in ("item_data", "setting"):
             continue
         fname = shard_filename(dtype, uid)
         if fname not in names:
-            audit.missing_for_plan.append(f"{fname}（当前操作需要）")
+            audit.missing_for_plan.append(
+                format_missing_file_compact(fname, reason="当前操作需要")
+            )
 
     return audit
 

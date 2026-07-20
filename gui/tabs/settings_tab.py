@@ -43,9 +43,17 @@ class SettingsTab(QWidget):
             pl.addWidget(row)
         layout.addWidget(g_paths)
 
+        source_panel = InfoPanel(tr("settings.source.title"))
+        source_panel.set_text(tr("settings.source.body"))
+        layout.addWidget(source_panel)
+
         guide_panel = InfoPanel(tr("settings.guide.title"))
         guide_panel.set_text(tr("settings.guide.body"))
         layout.addWidget(guide_panel)
+
+        crypto_panel = InfoPanel(tr("settings.crypto.title"))
+        crypto_panel.set_text(tr("settings.crypto.body"))
+        layout.addWidget(crypto_panel)
 
         deploy_panel = InfoPanel(tr("settings.deploy.title"))
         deploy_panel.set_text(tr("settings.deploy.body"))

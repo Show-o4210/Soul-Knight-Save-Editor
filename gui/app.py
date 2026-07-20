@@ -2,6 +2,7 @@
 """存档编辑器 GUI — 完整版。"""
 from __future__ import annotations
 
+import json
 import sys
 import traceback
 from datetime import datetime
@@ -408,65 +409,125 @@ class MainWindow(QMainWindow):
         try:
             ws = SaveWorkspace(self.row_input.path(), self.row_ref.path())
             snap = ws.load()
-            self._snap = snap
-            self._ws = ws
-            self._skin_data = snap.skin_data
-            self.heroes_skins_tab.load_from_snapshot(snap.hero_data, snap.skin_data)
-            self.pets_tab.load_from_snapshot(snap.pet_data)
-            is_full = snap.item_snapshot
-            self.garden_tab.load_from_snapshot(
+        except Exception as e:
+            self._on_refresh_failed(e)
+            return
+
+        self._snap = snap
+        self._ws = ws
+        self._skin_data = snap.skin_data
+        is_full = snap.item_snapshot or {}
+
+        # 各 Tab 独立装载：单个 Tab 异常不拖垮整次刷新
+        tab_errors: list[str] = []
+        for label, fn in (
+            ("heroes_skins", lambda: self.heroes_skins_tab.load_from_snapshot(
+                snap.hero_data, snap.skin_data
+            )),
+            ("pets", lambda: self.pets_tab.load_from_snapshot(snap.pet_data)),
+            ("garden", lambda: self.garden_tab.load_from_snapshot(
                 is_full.get("itemUnlock", []),
                 is_full.get("plants"),
-            )
-            self.room_tab.load_from_snapshot(snap.room_object_levels)
-            self.materials_tab.load_from_snapshot(
+            )),
+            ("room", lambda: self.room_tab.load_from_snapshot(snap.room_object_levels)),
+            ("materials", lambda: self.materials_tab.load_from_snapshot(
                 is_full.get("materials", {}),
                 is_full.get("seeds", {}),
                 is_full.get("blueprints", {}),
                 ref_materials=snap.ref_materials,
                 ref_seeds=snap.ref_seeds,
                 ref_blueprints=snap.ref_blueprints,
-            )
-            self.weapons_tab.load_from_snapshot(
+            )),
+            ("weapons", lambda: self.weapons_tab.load_from_snapshot(
                 snap.statistic_snapshot,
                 ref_weapon_used=snap.ref_weapon_used_times,
                 statistic_loaded=snap.statistic_loaded,
-            )
-            self.inspect_tab.bind_workspace(ws, snap.shard_summaries)
+            )),
+            ("inspect", lambda: self.inspect_tab.bind_workspace(ws, snap.shard_summaries)),
+        ):
+            try:
+                fn()
+            except Exception as exc:
+                tab_errors.append(f"{label}: {exc}")
+                self._log(f"  ⚠ Tab {label} 装载失败: {exc}")
 
-            gs = snap.game_summary
-            is_ = snap.item_snapshot
-            self.stat_uid.set_value(str(snap.uid))
-            self.stat_heroes.set_value(f"{gs['heroes_unlocked']}/{gs['heroes_total']}")
-            self.stat_skins.set_value(f"{gs['skins_owned']}/{gs['skins_total']}")
+        gs = snap.game_summary or {}
+        self.stat_uid.set_value(str(snap.uid))
+        if snap.game_loaded:
+            self.stat_heroes.set_value(f"{gs.get('heroes_unlocked', 0)}/{gs.get('heroes_total', 0)}")
+            self.stat_skins.set_value(f"{gs.get('skins_owned', 0)}/{gs.get('skins_total', 0)}")
             self.stat_pets.set_value(
-                f"{gs.get('pets_unlocked', '?')}/{gs.get('pets_total', '?')}"
+                f"{gs.get('pets_unlocked', 0)}/{gs.get('pets_total', 0)}"
             )
             self.stat_gems.set_value(str(gs.get("gems", "—")))
+        else:
+            self.stat_heroes.set_value("无 game")
+            self.stat_skins.set_value("无 game")
+            self.stat_pets.set_value("无 game")
+            self.stat_gems.set_value(str(snap.xml_gems if snap.xml_gems is not None else "—"))
 
-            self.summary_board.set_pairs(summary_pairs(snap))
-            self.input_chips.set_chips(input_file_chips(snap))
-            self.ref_chips.set_chips(reference_file_chips(snap))
-            notices = notice_lines(snap)
-            if notices:
-                self.notice_board.set_lines(notices)
-                self.notice_board.show()
-            else:
-                self.notice_board.hide()
-            self.status.setText(tr("status.loading", uid=snap.uid))
-            self._log(f"刷新载入 UID={snap.uid}")
-            seed_total = len(
-                set(is_full.get("seeds", {})) | set(snap.ref_seeds)
-            )
-            self._log(
-                f"  种子目录 {seed_total} 项（本号 {is_full.get('seeds_count')} + 参考补充）"
-            )
-        except Exception as e:
-            self.stat_uid.set_value("—")
-            self.summary_board.set_placeholder(str(e))
+        self.summary_board.set_pairs(summary_pairs(snap))
+        self.input_chips.set_chips(input_file_chips(snap))
+        self.ref_chips.set_chips(reference_file_chips(snap))
+        notices = notice_lines(snap)
+        if notices:
+            self.notice_board.set_lines(notices)
+            self.notice_board.show()
+        else:
             self.notice_board.hide()
-            self.status.setText(tr("status.failed"))
-            self._log(f"刷新失败: {e}")
+
+        if snap.game_loaded:
+            self.status.setText(tr("status.loading", uid=snap.uid))
+        else:
+            self.status.setText(tr("status.loading_partial", uid=snap.uid))
+        self._log(f"刷新载入 UID={snap.uid}（本地加解密） game={'✓' if snap.game_loaded else '✗'}")
+        seed_total = len(set(is_full.get("seeds", {})) | set(snap.ref_seeds))
+        self._log(
+            f"  种子目录 {seed_total} 项（本号 {is_full.get('seeds_count')} + 参考补充）"
+        )
+        for dtype, info in sorted((snap.shard_summaries or {}).items()):
+            if info.get("error"):
+                self._log(f"  ⚠ 分片 {dtype}: {info['error']}")
+            elif info.get("method"):
+                self._log(
+                    f"  · {dtype}: {info.get('method')} · {info.get('field_count', '?')} 字段"
+                )
+        if tab_errors:
+            self._log(f"  部分 Tab 装载失败 {len(tab_errors)} 处")
+
+    def _on_refresh_failed(self, e: BaseException) -> None:
+        self._snap = None
+        self._ws = None
+        self._skin_data = {}
+        self.stat_uid.set_value("—")
+        self.stat_heroes.set_value("—")
+        self.stat_skins.set_value("—")
+        self.stat_pets.set_value("—")
+        self.stat_gems.set_value("—")
+        detail = self._format_load_error(e)
+        self.summary_board.set_placeholder(detail)
+        self.input_chips.set_chips([])
+        self.ref_chips.set_chips([])
+        self.notice_board.hide()
+        try:
+            self.inspect_tab.bind_workspace(None, {})
+        except Exception:
+            pass
+        self.status.setText(tr("status.failed"))
+        self._log(tr("dialog.refresh.fail", detail=detail))
+        self._log(traceback.format_exc())
+
+    @staticmethod
+    def _format_load_error(exc: BaseException) -> str:
+        """把加解密/缺文件等错误收成短文案，避免 GUI 只显示晦涩堆栈首行。"""
+        msg = str(exc).strip() or exc.__class__.__name__
+        if isinstance(exc, FileNotFoundError):
+            return msg
+        if isinstance(exc, ValueError) and ("无法解密" in msg or "decrypt" in msg.lower()):
+            return msg
+        if isinstance(exc, json.JSONDecodeError):
+            return f"JSON 解析失败（文件可能损坏或算法不匹配）: {msg}"
+        return f"{exc.__class__.__name__}: {msg}"
 
     def preview_plan(self) -> None:
         plan = self._build_plan()
@@ -475,7 +536,18 @@ class MainWindow(QMainWindow):
             return
 
         runner = PatchRunner(self.row_input.path(), self.row_output.path(), self.row_ref.path())
-        preview = runner.preview(plan)
+        try:
+            preview = runner.preview(plan)
+        except Exception as e:
+            detail = self._format_load_error(e)
+            self._log(tr("dialog.preview.fail", detail=detail))
+            QMessageBox.warning(
+                self,
+                tr("dialog.preview.title"),
+                tr("dialog.preview.fail", detail=detail),
+            )
+            return
+
         self._log_plan(plan, "预览变更")
         self._log_preview_detail(preview)
         lines = ["【计划】", *preview["describe"], ""]
@@ -486,8 +558,10 @@ class MainWindow(QMainWindow):
         lines.extend(preview.get("deploy_checklist", []))
         if preview.get("issues"):
             lines.append("")
-            lines.append("⚠ 输入问题:")
-            lines.extend(f"• {x}" for x in preview["issues"])
+            lines.append("⚠ 输入问题（缺哪个 / 手机哪里取）:")
+            for issue in preview["issues"]:
+                lines.append("")
+                lines.extend(issue.splitlines())
         PreviewDialog(self, "\n".join(lines)).exec()
 
     def _confirm_encoded_changes(self) -> bool:
@@ -523,12 +597,13 @@ class MainWindow(QMainWindow):
         runner = PatchRunner(self.row_input.path(), self.row_output.path(), self.row_ref.path())
         issues = runner.validate(plan)
         if issues:
-            QMessageBox.warning(
-                self, tr("dialog.incomplete.title"), "\n".join(f"• {x}" for x in issues)
-            )
+            # 多行缺文件说明：块与块之间空一行，便于对照手机路径
+            body = tr("dialog.incomplete.hint") + "\n\n" + "\n\n".join(issues)
+            QMessageBox.warning(self, tr("dialog.incomplete.title"), body)
             self._log("应用中止：输入不完整")
             for issue in issues:
-                self._log(f"  ⚠ {issue}")
+                for line in issue.splitlines():
+                    self._log(f"  ⚠ {line}")
             return
 
         self.btn_apply.setEnabled(False)

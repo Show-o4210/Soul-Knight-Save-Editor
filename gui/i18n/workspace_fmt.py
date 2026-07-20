@@ -1,7 +1,13 @@
 """工作台展示格式化 — 统一文案与结构。"""
 from __future__ import annotations
 
-from core.constants import PREFS_NAME
+from core.constants import (
+    DEVICE_FILES_DIR,
+    DEVICE_SHARED_PREFS_DIR,
+    PREFS_NAME,
+    device_source_path,
+    format_missing_file_compact,
+)
 from core.shard_registry import shard_filename
 from gui.i18n.loader import tr
 
@@ -32,6 +38,14 @@ def summary_pairs(snap) -> list[tuple[str, str]]:
     return pairs
 
 
+def _chip_tip(name: str, ok: bool) -> str:
+    """芯片悬浮提示：文件名 + 手机路径（缺失时额外说明）。"""
+    path = device_source_path(name)
+    if ok:
+        return f"{name}\n手机: {path}"
+    return format_missing_file_compact(name)
+
+
 def input_file_chips(snap) -> list[tuple[str, str, bool]]:
     uid = snap.uid
     specs = [
@@ -39,9 +53,18 @@ def input_file_chips(snap) -> list[tuple[str, str, bool]]:
         ("XML", PREFS_NAME, bool(snap.prefs_path)),
         ("item", shard_filename("item_data", uid), snap.item_path is not None),
         ("setting", shard_filename("setting", uid), snap.setting_path is not None),
-        (tr("workspace.chip.weapon"), shard_filename("weapon_evolution_data", uid), snap.weapon_evolution_path is not None),
+        (
+            tr("workspace.chip.weapon"),
+            shard_filename("weapon_evolution_data", uid),
+            snap.weapon_evolution_path is not None,
+        ),
+        (
+            "statistic",
+            shard_filename("statistic", uid),
+            bool(getattr(snap, "statistic_path", None)),
+        ),
     ]
-    return [(short, name, ok) for short, name, ok in specs]
+    return [(short, _chip_tip(name, ok), ok) for short, name, ok in specs]
 
 
 def reference_file_chips(snap) -> list[tuple[str, str, bool]]:
@@ -53,6 +76,15 @@ def reference_file_chips(snap) -> list[tuple[str, str, bool]]:
 
 def notice_lines(snap) -> list[tuple[str, str]]:
     lines: list[tuple[str, str]] = []
+    # 始终提示手机源路径（便于首次使用者）
+    lines.append((
+        "info",
+        tr(
+            "workspace.device_paths",
+            files=DEVICE_FILES_DIR,
+            prefs=DEVICE_SHARED_PREFS_DIR,
+        ),
+    ))
     for w in snap.warnings or []:
         lines.append(("warn", w))
     for d in snap.ref_diff_lines or []:

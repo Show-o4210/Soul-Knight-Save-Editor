@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable
 
-from core.constants import PREFS_NAME
+from core.constants import DEVICE_FILES_DIR, PREFS_NAME, format_missing_file
 from core.crypto import encrypt_setting_data
 from core.deploy import checklist_lines
 from core.diff import dict_key_diff, list_append_preview, summarize_changes
@@ -38,8 +38,30 @@ class PatchRunner:
             needs_item=plan.touches_item(),
         )
         issues: list[str] = []
-        if len(audit.present_core) < len({"game.data", PREFS_NAME}):
-            issues.append("输入缺少 game.data 或 playerprefs.xml")
+        if not (ws.prefs_path and Path(ws.prefs_path).is_file()):
+            issues.append(format_missing_file(PREFS_NAME, reason="识别账号与写入 XML 的硬依赖"))
+        # 角色/皮肤/宠物/客厅必须真有 game.data；仅改 item 时无 game 可跳过镜像
+        needs_game_body = (
+            plan.all_characters
+            or bool(plan.hero_picks)
+            or plan.all_skins
+            or bool(plan.skin_picks)
+            or plan.all_pets
+            or bool(plan.pet_picks)
+            or plan.touches_game_room()
+        )
+        if needs_game_body and not snap.game_loaded:
+            issues.append(
+                format_missing_file("game.data", reason="当前计划需要（角色/皮肤/宠物/客厅）")
+            )
+        if plan.touches_item() and not snap.item_path and not snap.game_loaded:
+            item_name = shard_filename("item_data", snap.uid)
+            issues.append(
+                format_missing_file(
+                    item_name,
+                    reason=f"改物品需要该分片，或改用 {DEVICE_FILES_DIR}/game.data 镜像",
+                )
+            )
         if audit.missing_for_plan:
             issues.extend(audit.missing_for_plan)
 
@@ -53,7 +75,13 @@ class PatchRunner:
                 except Exception:
                     ref_item = None
             if not ref_item or not ref_item.is_file():
-                issues.append("物品参考合并需要「参考」目录内有 item_data_{UID}_.data")
+                issues.append(
+                    format_missing_file(
+                        "item_data_{UID}_.data",
+                        reason="物品参考合并需要",
+                        place_in="参考",
+                    )
+                )
 
         if plan.touches_weapon_evolution():
             ref_we = None
@@ -64,12 +92,21 @@ class PatchRunner:
                 except Exception:
                     ref_we = None
             if not ref_we or not ref_we.is_file():
-                issues.append("武器进化合并需要「参考」目录内有 weapon_evolution_data_{UID}_.data")
+                issues.append(
+                    format_missing_file(
+                        "weapon_evolution_data_{UID}_.data",
+                        reason="武器进化合并需要",
+                        place_in="参考",
+                    )
+                )
 
         if plan.touches_statistic():
+            stat_name = shard_filename("statistic", snap.uid)
             stat_path = discover_shard_path(self.input_dir, "statistic", snap.uid)
             if not stat_path or not stat_path.is_file():
-                issues.append(f"statistic_{snap.uid}_.data（改武器次数请放入输入）")
+                issues.append(
+                    format_missing_file(stat_name, reason="改武器获取次数 / 锻造 +8 请放入输入")
+                )
             if plan.merge_weapon_used_times or plan.merge_weapon_used_max:
                 ref_stat = None
                 if ref_dir and ref_dir.is_dir():
@@ -79,7 +116,13 @@ class PatchRunner:
                     except Exception:
                         ref_stat = None
                 if not ref_stat or not ref_stat.is_file():
-                    issues.append("武器次数参考合并需要「参考」目录内有 statistic_{UID}_.data")
+                    issues.append(
+                        format_missing_file(
+                            "statistic_{UID}_.data",
+                            reason="武器次数参考合并需要",
+                            place_in="参考",
+                        )
+                    )
         return issues
 
     def preview(self, plan: PatchPlan) -> dict[str, Any]:
@@ -154,12 +197,16 @@ class PatchRunner:
     def _build_manifest(self, ws: SaveWorkspace, plan: PatchPlan):
         has_item = ws.item_path is not None and ws.item_path.is_file()
         has_setting = ws.setting_path is not None and ws.setting_path.is_file()
-        return manifest_for_plan(
+        manifest = manifest_for_plan(
             plan,
             has_item_file=has_item,
             has_setting_file=has_setting,
             has_shards=self._shard_flags(ws),
         )
+        # 无 game.data 时绝不写出空壳主档
+        if not ws.game_loaded:
+            manifest.game = False
+        return manifest
 
     def apply(self, plan: PatchPlan, log: Callable[[str], None] | None = None) -> dict[str, Any]:
         def say(msg: str) -> None:
@@ -451,8 +498,11 @@ class PatchRunner:
                 say(f"武器获取次数参考合并: {st}")
 
         if item_changed and plan.sync_item_mirror:
-            ws.game.sync_item_mirror(ws.item.data)
-            say("已同步 game.data.itemData 镜像")
+            if ws.game_loaded:
+                ws.game.sync_item_mirror(ws.item.data)
+                say("已同步 game.data.itemData 镜像")
+            else:
+                say("跳过 game 镜像（输入无 game.data）")
 
         if plan.force_legacy_format and plan.touches_item():
             ws.prefs.force_legacy_format()

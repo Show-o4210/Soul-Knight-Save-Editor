@@ -15,6 +15,8 @@
 pip install -r requirements.txt
 ```
 
+依赖仅需 **PySide6** 与 **pycryptodome**。加解密已内置于 `core/crypto.py`（XOR + DES），**不依赖** `soul-knight-data-processing` / UnityPy，便于 PyInstaller 等打包。
+
 ### 2. 运行图形界面 (GUI)
 运行主入口脚本启动编辑器：
 ```bash
@@ -24,6 +26,8 @@ python run.py
 ### 3. 执行回归测试 (可选)
 如果需要对修改功能进行回归验收，可运行测试脚本：
 ```bash
+python -Xutf8 tests/accept_crypto_parity.py   # 去 UnityPy/SKD 验收门禁（含与 SKD 字节对照）
+python -Xutf8 tests/test_crypto_pure.py
 python -Xutf8 tests/test_v2.py
 python -Xutf8 tests/test_v3.py
 ```
@@ -53,14 +57,25 @@ python -Xutf8 tests/test_v3.py
 
 ## 📖 使用指南
 
+### 0. 手机上的存档在哪里？（最重要）
+
+从 Android 设备取出存档时，路径是固定的（需 root / 备份工具 / 可访问应用私有目录的文件管理器）：
+
+| 类型 | 手机路径 | 常见文件 |
+|------|----------|----------|
+| **所有 `.data` 分片** | `/data/data/com.ChillyRoom.DungeonShooter/files/` | `game.data`、`item_data_{UID}_.data`、`statistic_{UID}_.data`、`weapon_evolution_data_{UID}_.data`、`setting_{UID}_.data` 等 |
+| **PlayerPrefs XML** | `/data/data/com.ChillyRoom.DungeonShooter/shared_prefs/` | 通常为 `com.ChillyRoom.DungeonShooter.v2.playerprefs.xml`（版本不同时也可能是**名字类似**的 `*playerprefs*.xml`） |
+
+> 工具在 GUI「设置」页、工作台提示、以及「输入不完整」弹窗里，都会**写明缺哪个文件、在手机哪个路径**。缺文件时请对照提示复制到本地 `输入/` 后再点「刷新载入」。
+
 ### 1. 输入目录 (`输入/`) 放置规则
 
-根据修改的目标，将对应存档文件放入 `输入/` 目录下。
+把上表中从手机复制出的文件，按修改目标放入 `输入/` 目录：
 
 * **必备文件（始终需要）**：
-  * `game.data` — 主存档文件
-  * `com.ChillyRoom.DungeonShooter.v2.playerprefs.xml` — PlayerPrefs XML 文件
-* **按需放置（根据需要修改的项目）**：
+  * `game.data` ← 手机 `files/game.data`
+  * `com.ChillyRoom.DungeonShooter.v2.playerprefs.xml` ← 手机 `shared_prefs/`（名字类似也可）
+* **按需放置（根据需要修改的项目；均在手机 `files/`）**：
   * `item_data_{UID}_.data` — 涉及花圃、材料、种子、蓝图、神话武器修改时必须放入
   * `setting_{UID}_.data` — 改动物品时，若需同步 Legacy 开关则放入
   * `weapon_evolution_data_{UID}_.data` — 涉及武器进化等级合并时放入
@@ -71,13 +86,16 @@ python -Xutf8 tests/test_v3.py
   * 无 UID 区分的冗余副本（如 `item_data.data`）
 
 ### 2. 参考目录 (`参考/`) 放置规则
-仅在需要进行 **增量参考合并 (Union Merge)** 时使用。在该文件夹下放置全满号的 `playerprefs.xml` 以及对应 UID 的分片文件（例如 `item_data_{UID}_.data` 等）。
+仅在需要进行 **增量参考合并 (Union Merge)** 时使用。在该文件夹下放置全满号的 `playerprefs.xml`（同样来自参考号手机的 `shared_prefs/`）以及对应 UID 的分片文件（来自参考号手机的 `files/`，例如 `item_data_{UID}_.data` 等）。
 
 ### 3. 输出目录 (`输出/`) 部署方法
 每次在 GUI 界面点击“应用并输出”后：
 1. `输出/` 文件夹会被**清空并重新生成**。
 2. 仅会输出本次修改/合并**触及的加密分片文件**，未被修改的文件不会在输出目录中产生。
-3. 输出目录中会伴随生成 `部署说明.json` 和 `changes_preview.json`，提供详细的部署步骤清单。请根据说明将文件覆盖至手机对应路径中。
+3. 输出目录中会伴随生成 `部署说明.json` 和 `changes_preview.json`，提供详细的部署步骤清单。
+4. **写回手机时按原路径覆盖**：
+   * `.data` → `/data/data/com.ChillyRoom.DungeonShooter/files/`
+   * XML → `/data/data/com.ChillyRoom.DungeonShooter/shared_prefs/`
 
 ---
 

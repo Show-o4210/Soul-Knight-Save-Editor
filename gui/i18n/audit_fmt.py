@@ -1,7 +1,13 @@
 """将输入审计结果格式化为本地化展示文本。"""
 from __future__ import annotations
 
-from core.constants import PREFS_NAME
+from core.constants import (
+    DEVICE_FILES_DIR,
+    DEVICE_PREFS_GLOB_HINT,
+    DEVICE_SHARED_PREFS_DIR,
+    PREFS_NAME,
+    format_missing_file_compact,
+)
 from core.input_rules import InputAudit
 from gui.i18n.loader import tr
 
@@ -9,10 +15,18 @@ _CORE_FILES = ("game.data", PREFS_NAME)
 
 
 def format_audit(audit: InputAudit) -> list[str]:
-    lines = [tr("audit.required")]
+    lines = [
+        tr("audit.device_paths"),
+        f"  .data → {DEVICE_FILES_DIR}/",
+        f"  XML   → {DEVICE_SHARED_PREFS_DIR}/",
+        f"  文件名 → {DEVICE_PREFS_GLOB_HINT}",
+        tr("audit.required"),
+    ]
     for name in _CORE_FILES:
-        mark = tr("audit.present") if name in audit.present_core else tr("audit.missing_mark")
-        lines.append(f"  {mark}  {name}")
+        if name in audit.present_core:
+            lines.append(f"  {tr('audit.present')}  {name}")
+        else:
+            lines.append(f"  {tr('audit.missing_mark')}  {format_missing_file_compact(name)}")
     if audit.present_optional:
         lines.append(tr("audit.optional"))
         for name in audit.present_optional:
