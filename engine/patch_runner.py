@@ -191,7 +191,7 @@ class PatchRunner:
             "describe": plan.describe(),
             "detail_lines": detail,
             "output_files": output_files,
-            "deploy_checklist": checklist_lines(output_files=output_files),
+            "deploy_checklist": checklist_lines(output_files=output_files, platform=platform),
             "before_summary": before_summary,
             "after_summary": after_summary,
         }
@@ -244,7 +244,7 @@ class PatchRunner:
             "deploy": [],
             "output_files": manifest.filenames(uid, platform),
             "before": before_game,
-            "deploy_checklist": checklist_lines(output_files=manifest.filenames(uid, platform)),
+            "deploy_checklist": checklist_lines(output_files=manifest.filenames(uid, platform), platform=platform),
         }
         say(f"将输出 {len(manifest.filenames(uid, platform))} 个文件: {', '.join(manifest.filenames(uid, platform))}")
 

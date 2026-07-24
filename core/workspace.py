@@ -347,6 +347,7 @@ class SaveWorkspace:
         import json
 
         ws = SaveWorkspace(self.input_dir, self.reference_dir)
+        ws.platform = self.platform
         ws.uid = self.uid
         ws.game_path = self.game_path
         ws.prefs_path = self.prefs_path

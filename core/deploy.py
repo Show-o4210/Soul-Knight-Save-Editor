@@ -6,7 +6,9 @@ from core.constants import (
     IOS_DEVICE_FILES_DIR,
     DEVICE_SHARED_PREFS_DIR,
     IOS_DEVICE_SHARED_PREFS_DIR,
+    Platform,
     device_source_path,
+    ios_device_source_path,
     is_prefs_filename,
 )
 
@@ -20,25 +22,36 @@ DEPLOY_CHECKLIST: tuple[str, ...] = (
 )
 
 
-def checklist_lines(*, output_files: list[str] | None = None) -> list[str]:
-    lines = [
-        "【部署前检查】",
-        *[f"☐ {item}" for item in DEPLOY_CHECKLIST],
-        "",
-        "【Android覆盖目录】",
-        f"  .data → {DEVICE_FILES_DIR}/",
-        f"  XML   → {DEVICE_SHARED_PREFS_DIR}/",
-        "",
-        "【IOS覆盖目录】",
-        f"  .data → {IOS_DEVICE_FILES_DIR}/",
-        f"  PList   → {IOS_DEVICE_SHARED_PREFS_DIR}/",
-    ]
+def checklist_lines(*, output_files: list[str] | None = None, platform: Platform = Platform.Android) -> list[str]:
+    if platform == Platform.Android:
+        lines = [
+            "【部署前检查】",
+            *[f"☐ {item}" for item in DEPLOY_CHECKLIST],
+            "",
+            "【Android覆盖目录】",
+            f"  .data → {DEVICE_FILES_DIR}/",
+            f"  XML   → {DEVICE_SHARED_PREFS_DIR}/",
+        ]
+    else:
+        lines = [
+            "【部署前检查】",
+            "",
+            "【IOS覆盖目录】",
+            f"  .data → {IOS_DEVICE_FILES_DIR}/",
+            f"  PList   → {IOS_DEVICE_SHARED_PREFS_DIR}/",
+        ]
     if output_files:
         lines.append("")
         lines.append("【将覆盖的文件（完整手机路径）】")
         for name in output_files:
             if is_prefs_filename(name):
-                lines.append(f"• {device_source_path(name)}")
+                if platform == Platform.Android:
+                    lines.append(f"• {device_source_path(name)}")
+                else:
+                    lines.append(f"• {ios_device_source_path(name)}")
             else:
-                lines.append(f"•Android: {DEVICE_FILES_DIR}/{name}\nIOS: {IOS_DEVICE_FILES_DIR}/{name}")
+                if platform == Platform.Android:
+                    lines.append(f"•Android: {DEVICE_FILES_DIR}/{name}")
+                else:
+                    lines.append(f"IOS: {IOS_DEVICE_FILES_DIR}/{name}")
     return lines
