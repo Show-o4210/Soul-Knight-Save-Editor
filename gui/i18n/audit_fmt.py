@@ -3,26 +3,39 @@ from __future__ import annotations
 
 from core.constants import (
     DEVICE_FILES_DIR,
+    IOS_DEVICE_FILES_DIR,
     DEVICE_PREFS_GLOB_HINT,
+    IOS_DEVICE_PREFS_GLOB_HINT,
     DEVICE_SHARED_PREFS_DIR,
+    IOS_DEVICE_SHARED_PREFS_DIR,
     PREFS_NAME,
+    IOS_PREFS_NAME,
+    Platform,
     format_missing_file_compact,
 )
 from core.input_rules import InputAudit
 from gui.i18n.loader import tr
 
 _CORE_FILES = ("game.data", PREFS_NAME)
-
+_IOS_CORE_FILES = ("game.data", IOS_PREFS_NAME)
 
 def format_audit(audit: InputAudit) -> list[str]:
-    lines = [
-        tr("audit.device_paths"),
-        f"  .data → {DEVICE_FILES_DIR}/",
-        f"  XML   → {DEVICE_SHARED_PREFS_DIR}/",
-        f"  文件名 → {DEVICE_PREFS_GLOB_HINT}",
-        tr("audit.required"),
-    ]
-    for name in _CORE_FILES:
+    if audit.platform == Platform.Android:
+        lines = [
+            tr("audit.device_paths"),
+            f"  .data → {DEVICE_FILES_DIR}/",
+            f"  XML   → {DEVICE_SHARED_PREFS_DIR}/",
+            f"  文件名 → {DEVICE_PREFS_GLOB_HINT}",
+            tr("audit.required"),
+        ]
+    else:
+        lines = [tr("audit.ios_device_paths"),
+            f"  .data → {IOS_DEVICE_FILES_DIR}/",
+            f"  PList   → {IOS_DEVICE_SHARED_PREFS_DIR}/",
+            f"  文件名 → {IOS_DEVICE_PREFS_GLOB_HINT}",
+            tr("audit.required"),
+        ]
+    for name in _CORE_FILES if audit.platform == Platform.Android else _IOS_CORE_FILES:
         if name in audit.present_core:
             lines.append(f"  {tr('audit.present')}  {name}")
         else:

@@ -6,15 +6,21 @@ from pathlib import Path
 
 from core.constants import (
     DEVICE_FILES_DIR,
+    IOS_DEVICE_FILES_DIR,
     DEVICE_PREFS_GLOB_HINT,
+    IOS_DEVICE_PREFS_GLOB_HINT,
     DEVICE_SHARED_PREFS_DIR,
+    IOS_DEVICE_SHARED_PREFS_DIR,
     DUPLICATE_BASENAMES,
     PREFS_NAME,
+    IOS_PREFS_NAME,
+    Platform,
     format_missing_file_compact,
 )
 from core.shard_registry import WRITABLE_SHARDS, shard_filename
 
 CORE_FILES = ("game.data", PREFS_NAME)
+IOS_CORE_FILES = ("game.data", IOS_PREFS_NAME)
 
 JUNK_NAMES = frozenset({
     "bugly_last_us_up_tm",
@@ -26,6 +32,7 @@ JUNK_SUFFIXES = (".dat",)
 
 @dataclass
 class InputAudit:
+    platform: Platform
     uid: str
     present_core: list[str] = field(default_factory=list)
     present_optional: list[str] = field(default_factory=list)
@@ -36,14 +43,21 @@ class InputAudit:
     missing_core: list[str] = field(default_factory=list)
 
     def summary_lines(self) -> list[str]:
-        lines = [
-            "【手机源路径】",
-            f"  .data 分片 → {DEVICE_FILES_DIR}/",
-            f"  PlayerPrefs XML → {DEVICE_SHARED_PREFS_DIR}/",
-            f"  XML 文件名 → {DEVICE_PREFS_GLOB_HINT}",
-            "【必备】",
-        ]
-        for name in CORE_FILES:
+        if self.platform == Platform.Android:
+            lines = [
+                "【Android源路径】",
+                f"  .data 分片 → {DEVICE_FILES_DIR}/",
+                f"  PlayerPrefs XML → {DEVICE_SHARED_PREFS_DIR}/",
+                f"  XML 文件名 → {DEVICE_PREFS_GLOB_HINT}",
+            ]
+        else:
+            lines = ["【IOS源路径】",
+                f"  .data 分片 → {IOS_DEVICE_FILES_DIR}/",
+                f"  PlayerPrefs PList → {IOS_DEVICE_SHARED_PREFS_DIR}/",
+                f"  PList 文件名 → {IOS_DEVICE_PREFS_GLOB_HINT}",
+                "【必备】",
+            ]
+        for name in CORE_FILES if self.platform == Platform.Android else IOS_CORE_FILES:
             if name in self.present_core:
                 lines.append(f"  ✓  {name}")
             else:
@@ -75,12 +89,12 @@ class OutputManifest:
     setting: bool = False
     shards: dict[str, bool] = field(default_factory=dict)
 
-    def filenames(self, uid: str) -> list[str]:
+    def filenames(self, uid: str, platform: Platform) -> list[str]:
         names: list[str] = []
         if self.game:
             names.append("game.data")
         if self.prefs:
-            names.append(PREFS_NAME)
+            names.append(PREFS_NAME if platform == Platform.Android else IOS_PREFS_NAME)
         if self.item:
             names.append(shard_filename("item_data", uid))
         if self.setting:
@@ -101,14 +115,15 @@ def _is_junk(path: Path) -> bool:
     return False
 
 
-def audit_input(input_dir: Path, uid: str, *, needs_item: bool = False, needs_shards: list[str] | None = None) -> InputAudit:
-    audit = InputAudit(uid=uid)
+def audit_input(input_dir: Path, uid: str, *, platform: Platform = Platform.Android, needs_item: bool = False, needs_shards: list[str] | None = None) -> InputAudit:
+    audit = InputAudit(uid=uid,platform=platform)
+    temp_core_files = CORE_FILES if platform == Platform.Android else IOS_CORE_FILES
     if not input_dir.is_dir():
-        audit.missing_core = list(CORE_FILES)
+        audit.missing_core = list(temp_core_files)
         return audit
 
     names = {p.name for p in input_dir.iterdir() if p.is_file()}
-    for core in CORE_FILES:
+    for core in temp_core_files:
         if core in names:
             audit.present_core.append(core)
         else:
@@ -116,6 +131,12 @@ def audit_input(input_dir: Path, uid: str, *, needs_item: bool = False, needs_sh
             if core == PREFS_NAME:
                 xmls = [n for n in names if n.lower().endswith(".xml")]
                 if xmls:
+                    audit.present_core.append(core)
+                    continue
+            # prefs 允许类似命名的 plist 顶替
+            if core == IOS_PREFS_NAME:
+                plists = [n for n in names if n.lower().endswith(".plist")]
+                if plists:
                     audit.present_core.append(core)
                     continue
             audit.missing_core.append(core)
@@ -130,7 +151,7 @@ def audit_input(input_dir: Path, uid: str, *, needs_item: bool = False, needs_sh
     for p in sorted(input_dir.iterdir()):
         if not p.is_file():
             continue
-        if p.name in CORE_FILES or p.name in audit.present_optional:
+        if p.name in temp_core_files or p.name in audit.present_optional:
             continue
         if p.name in DUPLICATE_BASENAMES:
             audit.redundant.append(p.name)

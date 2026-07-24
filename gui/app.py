@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from core.constants import INPUT_DIR, OUTPUT_DIR, REF_DIR
+from core.constants import INPUT_DIR, OUTPUT_DIR, REF_DIR, Platform
 from core.workspace import SaveWorkspace
 from engine.patch_plan import PatchPlan
 from engine.patch_runner import PatchRunner
@@ -181,12 +181,14 @@ class MainWindow(QMainWindow):
 
         stats_row = QHBoxLayout()
         stats_row.setSpacing(12)
+        self.stat_platform = StatCard(tr("stat.platform"))
         self.stat_uid = StatCard(tr("stat.uid"))
         self.stat_heroes = StatCard(tr("stat.heroes"))
         self.stat_skins = StatCard(tr("stat.skins"))
         self.stat_pets = StatCard(tr("stat.pets"))
         self.stat_gems = StatCard(tr("stat.gems"))
         for card in (
+            self.stat_platform,
             self.stat_uid,
             self.stat_heroes,
             self.stat_skins,
@@ -452,6 +454,7 @@ class MainWindow(QMainWindow):
                 self._log(f"  ⚠ Tab {label} 装载失败: {exc}")
 
         gs = snap.game_summary or {}
+        self.stat_platform.set_value(str("Android" if snap.platform == Platform.Android else "IOS"))
         self.stat_uid.set_value(str(snap.uid))
         if snap.game_loaded:
             self.stat_heroes.set_value(f"{gs.get('heroes_unlocked', 0)}/{gs.get('heroes_total', 0)}")
@@ -480,7 +483,7 @@ class MainWindow(QMainWindow):
             self.status.setText(tr("status.loading", uid=snap.uid))
         else:
             self.status.setText(tr("status.loading_partial", uid=snap.uid))
-        self._log(f"刷新载入 UID={snap.uid}（本地加解密） game={'✓' if snap.game_loaded else '✗'}")
+        self._log(f"刷新载入 平台={'Android' if snap.platform == Platform.Android else 'IOS'} UID={snap.uid}（本地加解密） game={'✓' if snap.game_loaded else '✗'}")
         seed_total = len(set(is_full.get("seeds", {})) | set(snap.ref_seeds))
         self._log(
             f"  种子目录 {seed_total} 项（本号 {is_full.get('seeds_count')} + 参考补充）"
@@ -499,6 +502,7 @@ class MainWindow(QMainWindow):
         self._snap = None
         self._ws = None
         self._skin_data = {}
+        self.stat_platform.set_value("—")
         self.stat_uid.set_value("—")
         self.stat_heroes.set_value("—")
         self.stat_skins.set_value("—")

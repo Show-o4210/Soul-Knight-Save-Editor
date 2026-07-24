@@ -179,7 +179,7 @@ class PatchPlan:
         if self.secret_keys_append:
             items.append(f"秘密钥匙 +{len(self.secret_keys_append)}")
         if self.cleanup_stale_uid:
-            items.append("清理 XML 他号键")
+            items.append("清理 XML / PList 他号键")
         if self.force_legacy_format and self.touches_item():
             items.append("Legacy 格式开关 → 0")
         if self.merge_blueprints:
