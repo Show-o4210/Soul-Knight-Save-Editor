@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+from datetime import datetime
 import json
+import plistlib
 import re
 from pathlib import Path
 from typing import Any
@@ -8,8 +11,12 @@ from urllib.parse import unquote
 
 from core.constants import (
     DEVICE_PREFS_GLOB_HINT,
+    IOS_DEVICE_PREFS_GLOB_HINT,
     DEVICE_SHARED_PREFS_DIR,
+    IOS_DEVICE_SHARED_PREFS_DIR,
     PREFS_NAME,
+    IOS_PREFS_NAME,
+    Platform,
     format_missing_file,
 )
 
@@ -22,35 +29,95 @@ def _bool_pref_str(value: bool) -> str:
 
 
 class PlayerPrefsStore:
-    def __init__(self, path: Path, uid_prefix: str = "") -> None:
+    def __init__(self, path: Path, uid_prefix: str = "", platform: Platform = Platform.Android) -> None:
+        self.platform = platform
         self.path = path
         self.uid_prefix = uid_prefix
         self._entries: list[dict[str, Any]] = []
 
     @classmethod
-    def load(cls, path: Path, uid_prefix: str = "") -> PlayerPrefsStore:
-        store = cls(path, uid_prefix)
-        store._entries = store._parse(path.read_text(encoding="utf-8"))
+    def load(cls, path: Path, uid_prefix: str = "", platform: Platform = Platform.Android) -> PlayerPrefsStore:
+        store = cls(path, uid_prefix, platform)
+        store._entries = store._parse(path.read_text(encoding="utf-8") if platform == Platform.Android else path.read_bytes())
         return store
 
     @staticmethod
-    def _parse(xml_text: str) -> list[dict[str, Any]]:
+    def _parse(xml_text_or_plist_bytes: str | bytes) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        tag_re = re.compile(
-            r'<(int|float|long|boolean)\s+name="([^"]+)"\s+value="([^"]*)"\s*/>'
-            r'|'
-            r'<(string)\s+name="([^"]+)"\s+value="([^"]*)"\s*/>'
-            r'|'
-            r'<(string)\s+name="([^"]+)">([^<]*)</string>',
-            re.MULTILINE,
-        )
-        for m in tag_re.finditer(xml_text):
-            if m.group(1):
-                entries.append({"tag": m.group(1), "name": m.group(2), "value": m.group(3) or "", "text": None})
-            elif m.group(4):
-                entries.append({"tag": m.group(4), "name": m.group(5), "value": m.group(6) or "", "text": None})
-            else:
-                entries.append({"tag": m.group(7), "name": m.group(8), "value": None, "text": m.group(9)})
+        if isinstance(xml_text_or_plist_bytes, str):
+            tag_re = re.compile(
+                r'<(int|float|long|boolean)\s+name="([^"]+)"\s+value="([^"]*)"\s*/>'
+                r'|'
+                r'<(string)\s+name="([^"]+)"\s+value="([^"]*)"\s*/>'
+                r'|'
+                r'<(string)\s+name="([^"]+)">([^<]*)</string>',
+                re.MULTILINE,
+            )
+            for m in tag_re.finditer(xml_text_or_plist_bytes):
+                if m.group(1):
+                    entries.append({"tag": m.group(1), "name": m.group(2), "value": m.group(3) or "", "text": None})
+                elif m.group(4):
+                    entries.append({"tag": m.group(4), "name": m.group(5), "value": m.group(6) or "", "text": None})
+                else:
+                    entries.append({"tag": m.group(7), "name": m.group(8), "value": None, "text": m.group(9)})
+        else:
+            plist_dict = plistlib.loads(xml_text_or_plist_bytes)
+            entries: list[dict[str, Any]] = []
+            for key, raw_val in plist_dict.items():
+                tag: str
+                value: str | None = None
+                text: str | None = None
+
+                if isinstance(raw_val, str):
+                    tag = "string"
+                    text = raw_val
+                    value = None
+
+                elif isinstance(raw_val, int):
+                    tag = "int"
+                    value = str(raw_val)
+                    text = None
+
+                elif isinstance(raw_val, float):
+                    tag = "float"
+                    value = str(raw_val)
+                    text = None
+
+                elif isinstance(raw_val, bool):
+                    tag = "boolean"
+                    value = _bool_pref_str(raw_val)
+                    text = None
+
+                elif isinstance(raw_val, list):
+                    tag = "array"
+                    # 使用json序列化，方便跨语言；复杂对象可改用repr
+                    value = json.dumps(raw_val, ensure_ascii=False)
+                    text = None
+
+                elif isinstance(raw_val, dict):
+                    tag = "dict"
+                    value = json.dumps(raw_val, ensure_ascii=False)
+                    text = None
+
+                elif isinstance(raw_val, bytes):
+                    # plist中的data类型
+                    tag = "data"
+                    # base64编码二进制存储字符串
+                    import base64
+                    value = base64.b64encode(raw_val).decode("ascii")
+                    text = None
+
+                elif isinstance(raw_val, datetime):
+                    tag = "date"
+                    value = raw_val.isoformat()
+                    text = None
+
+                else:
+                    # 其余未知类型直接跳过
+                    print('continue type')
+                    continue
+
+                entries.append({"tag": tag, "name": key, "value": value, "text": text})
         return entries
 
     def get(self, key: str) -> str | None:
@@ -92,20 +159,63 @@ class PlayerPrefsStore:
 
     def save(self, path: Path | None = None) -> None:
         path = path or self.path
-        lines = [
-            "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>",
-            "<map>",
-        ]
-        for e in self._entries:
-            name, tag = e["name"], e["tag"]
-            if tag == "string":
-                text = e.get("text") or e.get("value") or ""
-                lines.append(f'    <string name="{name}">{text}</string>')
-            else:
-                val = e.get("value", "0")
-                lines.append(f'    <{tag} name="{name}" value="{val}" />')
-        lines.append("</map>")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if path.suffix != '.plist':
+            lines = [
+                "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>",
+                "<map>",
+            ]
+            for e in self._entries:
+                name, tag = e["name"], e["tag"]
+                if tag == "string":
+                    text = e.get("text") or e.get("value") or ""
+                    lines.append(f'    <string name="{name}">{text}</string>')
+                else:
+                    val = e.get("value", "0")
+                    lines.append(f'    <{tag} name="{name}" value="{val}" />')
+            lines.append("</map>")
+            path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        else:
+            out = {}
+            for e in self._entries:
+                name = e["name"]
+                tag = e["tag"]
+                raw_val = e.get("value", "")
+                text_val = e.get("text")
+                if tag == "string":
+                    out[name] = text_val or raw_val or ""
+                elif tag == "int":
+                    try:
+                        out[name] = int(raw_val)
+                    except (ValueError, TypeError):
+                        out[name] = 0
+                elif tag == "float":
+                    try:
+                        out[name] = float(raw_val)
+                    except (ValueError, TypeError):
+                        out[name] = 0.0
+                elif tag == "boolean":
+                    out[name] = raw_val.lower() == "true"
+                elif tag == "array":
+                    try:
+                        out[name] = json.loads(raw_val)
+                    except Exception:
+                        out[name] = []
+                elif tag == "dict":
+                    try:
+                        out[name] = json.loads(raw_val)
+                    except Exception:
+                        out[name] = {}
+                elif tag == "data":
+                    try:
+                        out[name] = base64.b64decode(raw_val)
+                    except Exception:
+                        out[name] = b""
+                elif tag == "date":
+                    try:
+                        out[name] = datetime.fromisoformat(raw_val)
+                    except Exception:
+                        out[name] = datetime.now()
+            path.write_bytes(plistlib.dumps(out, fmt=plistlib.FMT_BINARY))
 
     def patch_characters(self, *, default_level: int = 7, game_data: dict[str, Any] | None = None) -> dict[str, int]:
         stats = {"unlock": 0, "level": 0, "skill": 0}
@@ -468,21 +578,33 @@ def discover_prefs(input_dir: Path) -> Path:
     prefs = input_dir / PREFS_NAME
     if prefs.is_file():
         return prefs
+    ios_prefs = input_dir / IOS_PREFS_NAME
+    if ios_prefs.is_file():
+        return ios_prefs
     candidates = sorted(input_dir.glob("*.xml"))
     if len(candidates) == 1:
         return candidates[0]
     if candidates:
         return max(candidates, key=lambda p: p.stat().st_size)
+    ios_candidates = sorted(input_dir.glob("*.plist"))
+    if len(ios_candidates) == 1:
+        return ios_candidates[0]
+    if ios_candidates:
+        return max(ios_candidates, key=lambda p: p.stat().st_size)
     raise FileNotFoundError(
         f"{format_missing_file(PREFS_NAME, reason='识别账号 UID 的硬依赖')}\n"
         f"  当前「输入」目录: {input_dir}\n"
         f"  （也可用同目录任意 *playerprefs*.xml / 唯一的 *.xml）\n"
-        f"  手机目录: {DEVICE_SHARED_PREFS_DIR}/ · {DEVICE_PREFS_GLOB_HINT}"
+        f"  Android目录: {DEVICE_SHARED_PREFS_DIR}/ · {DEVICE_PREFS_GLOB_HINT}\n"
+        f"{format_missing_file(IOS_PREFS_NAME, reason='识别账号 UID 的硬依赖')}\n"
+        f"  当前「输入」目录: {input_dir}\n"
+        f"  （也可用同目录任意 *.plist）\n"
+        f"  IOS目录: {IOS_DEVICE_SHARED_PREFS_DIR}/ · {IOS_DEVICE_PREFS_GLOB_HINT}"
     )
 
 
-def detect_uid(prefs_path: Path) -> str:
-    entries = PlayerPrefsStore._parse(prefs_path.read_text(encoding="utf-8"))
+def detect_uid(prefs_path: Path, platform: Platform = Platform.Android) -> str:
+    entries = PlayerPrefsStore._parse(prefs_path.read_text(encoding="utf-8") if platform == Platform.Android else prefs_path.read_bytes())
     by_name = {e["name"]: e for e in entries}
 
     def text(entry: dict[str, Any]) -> str:

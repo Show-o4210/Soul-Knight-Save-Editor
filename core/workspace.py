@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.constants import DEVICE_FILES_DIR, PREFS_NAME, format_missing_file_compact
+from core.constants import DEVICE_FILES_DIR, PREFS_NAME, IOS_PREFS_NAME, Platform, format_missing_file_compact
 from core.crypto import decrypt_file
 from core.input_rules import audit_input
 from core.reference_diff import compute_reference_diff
@@ -16,9 +16,9 @@ from core.stores.statistic_store import StatisticStore
 from core.stores.weapon_evolution_store import WeaponEvolutionStore
 from core.weapon_util import filter_weapon_blueprints
 
-
 @dataclass
 class WorkspaceSnapshot:
+    platform: Platform
     uid: str
     input_dir: str
     game_path: str | None
@@ -59,6 +59,7 @@ class SaveWorkspace:
     def __init__(self, input_dir: Path, reference_dir: Path | None = None) -> None:
         self.input_dir = input_dir.resolve()
         self.reference_dir = reference_dir.resolve() if reference_dir else None
+        self.platform: Platform = Platform.Android
         self.uid: str | None = None
         self.game_path: Path | None = None
         self.prefs_path: Path | None = None
@@ -78,6 +79,7 @@ class SaveWorkspace:
         self._ref_item: dict[str, Any] | None = None
         self._ref_weapon_evolution: dict[str, Any] | None = None
         self._ref_statistic: dict[str, Any] | None = None
+        self._ref_platform: Platform = Platform.Android
         self._ref_uid: str | None = None
 
     def load(self) -> WorkspaceSnapshot:
@@ -88,8 +90,9 @@ class SaveWorkspace:
 
         # prefs 是识别 UID 的硬依赖；game.data 可缺（分片编辑仍可用）
         self.prefs_path = discover_prefs(self.input_dir)
-        self.uid = detect_uid(self.prefs_path)
-        self._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid)
+        self.platform = Platform.IOS if self.prefs_path.suffix == '.plist' else Platform.Android
+        self.uid = detect_uid(self.prefs_path, self.platform)
+        self._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid, self.platform)
 
         candidate_game = self.input_dir / "game.data"
         if candidate_game.is_file():
@@ -144,7 +147,7 @@ class SaveWorkspace:
 
         self._load_reference_shards()
 
-        audit = audit_input(self.input_dir, self.uid)
+        audit = audit_input(self.input_dir, self.uid, platform=self.platform)
         prefs = self._prefs
         skin_data = {
             hero: list(skins)
@@ -156,7 +159,7 @@ class SaveWorkspace:
         game_gems = self._game.data.get("gems") if self.game_loaded else None
         rij = prefs.get(f"OpenRijTest_{self.uid}")
         if rij is None:
-            warnings.append("XML 缺少 OpenRijTest，改物品时将写入 0")
+            warnings.append("XML / PList 缺少 OpenRijTest，改物品时将写入 0")
         elif rij not in ("0", 0):
             warnings.append("OpenRijTest 非 0，改物品时将强制 Legacy")
         if (
@@ -183,6 +186,7 @@ class SaveWorkspace:
             ref_used = dict(StatisticStore(self._ref_statistic).snapshot().get("weapon_used_times", {}))
 
         return WorkspaceSnapshot(
+            platform=self.platform,
             uid=self.uid,
             input_dir=str(self.input_dir),
             game_path=str(self.game_path) if self.game_path else None,
@@ -235,10 +239,15 @@ class SaveWorkspace:
         if not self.reference_dir or not self.reference_dir.is_dir():
             return
         ref_prefs = self.reference_dir / PREFS_NAME
-        if not ref_prefs.is_file():
+        ios_ref_prefs = self.reference_dir / IOS_PREFS_NAME
+        if ref_prefs.is_file():
+            self._ref_platform = Platform.Android
+        if ios_ref_prefs.is_file():
+            self._ref_platform = Platform.IOS
+        if ref_prefs.is_file() and ios_ref_prefs.is_file():
             return
         try:
-            self._ref_uid = detect_uid(ref_prefs)
+            self._ref_uid = detect_uid(ref_prefs if self._ref_platform == Platform.Android else ios_ref_prefs, self._ref_platform)
             ref_item_path = discover_shard_path(self.reference_dir, "item_data", self._ref_uid)
             if ref_item_path:
                 self._ref_item = ItemDataStore.load(ref_item_path).data
@@ -351,7 +360,7 @@ class SaveWorkspace:
             json.loads(json.dumps(self._game.data if self._game else {})),
             self.game_path,
         )
-        ws._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid or "")
+        ws._prefs = PlayerPrefsStore.load(self.prefs_path, self.uid or "", self.platform)
         ws._item = ItemDataStore(
             json.loads(json.dumps(self._item.data if self._item else {})),
             self.item_path,

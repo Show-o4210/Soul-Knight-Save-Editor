@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from core.constants import (
     DEVICE_FILES_DIR,
+    IOS_DEVICE_FILES_DIR,
     DEVICE_SHARED_PREFS_DIR,
+    IOS_DEVICE_SHARED_PREFS_DIR,
     PREFS_NAME,
+    IOS_PREFS_NAME,
     device_source_path,
     format_missing_file_compact,
 )
@@ -83,6 +86,14 @@ def notice_lines(snap) -> list[tuple[str, str]]:
             "workspace.device_paths",
             files=DEVICE_FILES_DIR,
             prefs=DEVICE_SHARED_PREFS_DIR,
+        ),
+    ))
+    lines.append((
+        "info",
+        tr(
+            "workspace.ios_device_paths",
+            files=IOS_DEVICE_FILES_DIR,
+            prefs=IOS_DEVICE_SHARED_PREFS_DIR,
         ),
     ))
     for w in snap.warnings or []:
