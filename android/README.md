@@ -21,3 +21,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。该 APK 使用调
 首次写入前需确认个人本地存档用途。扫描会关闭所指定的游戏进程。应用不登录账号、不访问云端，也没有联网权限。
 
 `alpha05` 的等级与技能尚待设备写回及游戏内验收。请先备份自己的原始文件，再在专用测试设备上验证。详见[开发状态](../docs/development-status.md)。
+
+## 本地读取与 `.data.new`
+
+正常编辑时，若所选账号的 PlayerPrefs XML 已有 `OpenRijTest_<UID>` 或 `OpenNewtonJsonTest_<UID>` 且值为 `1`，预览会列出将其设为 `0`。应用不会补造缺失键，不处理 `.data.new`，也不能保证游戏最终选择哪份进度。只有 `__UNITY_PLAYERPREFS_VERSION__` 的 XML 不具备这项操作所需的账号键。具体排查和手动核对步骤见[本地读取与 `.data.new` 说明](../docs/local-data-reading.md)。

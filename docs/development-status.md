@@ -9,6 +9,7 @@
 | Android `game.data` / PlayerPrefs XML 事务写回 | 已实现；写前漂移检查、原件备份、复读、回滚；不同设备仍需验证 |
 | Android 主动 ZIP 备份 | 已实现导出；不支持 ZIP 导入或整包恢复 |
 | Android 其他 `.data` 编辑 | 尚未移植；目前仅能只读收集进备份 |
+| `.data.new` 与云端/本地选择 | 不读取或修改 `.data.new`；仅在正常编辑时把所选账号 XML 中已存在且为 `1` 的两个读取开关改为 `0`，不保证游戏最终读取来源 |
 | Python 桌面版 | 保留原有代码并移至 `desktop/`；本次仅整理仓库结构 |
 
 验证记录：公开源码环境下 Android 50 项 JVM 测试通过，1 项需要私有样本的测试按设计跳过；本地注入私有样本后 51 项全部通过。`assembleDebug` 成功；lint 0 errors、39 warnings。没有把私有真实存档、构建缓存或本地 SDK 配置加入本次公开 Android 源码。

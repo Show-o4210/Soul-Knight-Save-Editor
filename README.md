@@ -16,6 +16,8 @@
 
 `alpha05` 的公开源码测试有 50 项通过、1 项因缺少私有样本而跳过；Debug APK 构建及 Android lint 通过（0 个错误、39 个警告）。新增的等级与技能逻辑已做私有样本离线校验，**尚未完成该版本的设备写回、游戏实载及重启持久化验收**。角色与皮肤修改此前收到过游戏内有效性反馈。详细边界见[开发状态](docs/development-status.md)和 [Android 说明](android/README.md)。
 
+关于“Root 已授权但找不到存档”、`.data.new` 以及已有 PlayerPrefs 读取开关的处理，请看[本地读取与 `.data.new` 说明](docs/local-data-reading.md)。当前 APK 没有独立的云端/本地切换功能；若 XML 中没有相应账号的开关，不能通过新增键来保证强制读取 `.data`。
+
 ## Python 桌面版
 
 原有 Python 工程整体移入 [`desktop/`](desktop/)；从该目录启动、构建和运行测试。旧版公开的参考样本仍保留在该目录中，不需要也不应提交自己的存档。使用方式见 [Python 说明](desktop/README.md)。
