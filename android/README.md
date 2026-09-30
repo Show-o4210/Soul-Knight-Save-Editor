@@ -41,4 +41,9 @@ alpha13 的 115 项 JVM 测试全部通过，私有配对样本只读离线验�
 
 ## 本地读取与 `.data.new`
 
-正常编辑时，若所选账号的 PlayerPrefs XML 已有 `OpenRijTest_<UID>` 或 `OpenNewtonJsonTest_<UID>` 且值为 `1`，预览会列出将其设为 `0`。应用不会补造缺失键，不处理 `.data.new`，也不能保证游戏最终选择哪份进度。只有 `__UNITY_PLAYERPREFS_VERSION__` 的 XML 不具备这项操作所需的账号键。具体排查和手动核对步骤见[本地读取与 `.data.new` 说明](../docs/local-data-reading.md)。
+正常编辑时，若所选账号的 PlayerPrefs XML 已有 `OpenRijTest_<UID>` 或 `OpenNewtonJsonTest_<UID>` 且值为 `1`，预览会列出将其设为 `0`。应用不会补造缺失键，不处理 `.data.new`，也不能保证游戏最终选择哪份进度。只有 `__UNITY_PLAYERPREFS_VERSION__` 的 XML 不具备这项操作所需的账号键。具体排查和手动核对步骤见[本地读取与 `.data.new` 说明](../local-data-reading.md)。
+
+`alpha05` 的等级与技能尚待设备写回及游戏内验收。请先备份自己的原始文件，再在专用测试设备上验证。详见[开发状态](../docs/development-status.md)。
+
+建议使用虚拟机，真机root在我实际测试时蛮容易闪退的。
+单指游戏，而非工具，即便不做任何修改我也闪退。

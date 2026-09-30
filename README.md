@@ -21,7 +21,7 @@
 
 alpha14 修正为手指上滑收缩标题、下滑展开，并加入标题连点触发的 SHOWCHEER 彩蛋。3 项彩蛋定向测试、Debug 构建、lint 与安装版本核对通过；本轮未重跑完整核心回归。具体见[alpha14 记录](docs/header-easter-egg-alpha14.md)，仍为测试候选。
 
-关于“Root 已授权但找不到存档”、`.data.new` 以及已有 PlayerPrefs 读取开关的处理，请看[本地读取与 `.data.new` 说明](docs/local-data-reading.md)。当前 APK 没有独立的云端/本地切换功能；若 XML 中没有相应账号的开关，不能通过新增键来保证强制读取 `.data`。
+关于“Root 已授权但找不到存档”、`.data.new` 以及已有 PlayerPrefs 读取开关的处理，请看[本地读取与 `.data.new` 说明](local-data-reading.md)。当前 APK 没有独立的云端/本地切换功能；若 XML 中没有相应账号的开关，不能通过新增键来保证强制读取 `.data`。
 
 ## Python 桌面版
 
