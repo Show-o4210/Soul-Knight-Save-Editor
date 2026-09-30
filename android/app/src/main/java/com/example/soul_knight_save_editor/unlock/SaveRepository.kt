@@ -6,9 +6,11 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 data class SaveFile(val path: String, val bytes: ByteArray, val owner: String, val mode: String, val context: String)
-data class SaveSnapshot(val packageName: String, val user: Int, val prefs: SaveFile, val game: SaveFile?) {
-    val files get() = listOfNotNull(prefs, game)
+data class SaveSnapshot(val packageName: String, val user: Int, val prefs: SaveFile?, val game: SaveFile?, val items: List<SaveFile> = emptyList(),
+    val statistics: List<SaveFile> = emptyList()) {
+    val files get() = listOfNotNull(prefs, game) + items + statistics
 }
+data class SavePlan(val outputs: Map<String, ByteArray>, val changes: List<String>, val sections: Map<String, List<String>> = emptyMap())
 interface DeviceStorage {
     fun stop(packageName: String, user: Int)
     fun read(path: String): SaveFile
@@ -39,8 +41,13 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     }
     private fun records(): List<File> = directory.listFiles().orEmpty().filter { it.isDirectory && File(it, "manifest.json").exists() }.sortedByDescending { it.name }
     fun pending(): List<String> = records().filter { stateOf(it) !in setOf("complete", "rolled_back", "restored") }.map { it.name }
-    fun completed(): List<String> = records().filter { stateOf(it) == "complete" }.map { it.name }
-    fun exportable(): List<String> = records().map { it.name }
+    fun packageName(id: String): String = manifest(folder(id)).getValue("package").jsonPrimitive.content
+    fun completed(packageName: String? = null): List<String> = records().filter {
+        stateOf(it) == "complete" && (packageName == null || manifest(it)["package"]?.jsonPrimitive?.content == packageName)
+    }.map { it.name }
+    fun exportable(packageName: String? = null): List<String> = records().filter {
+        packageName == null || manifest(it)["package"]?.jsonPrimitive?.content == packageName
+    }.map { it.name }
     @Synchronized fun originals(id: String): BackupPayload {
         val folder = folder(id)
         val metadata = manifest(folder)
@@ -55,10 +62,18 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     private fun same(a: SaveFile, b: SaveFile) = a.bytes.contentEquals(b.bytes) && a.owner == b.owner && a.mode == b.mode && a.context == b.context
 
     @Synchronized fun apply(snapshot: SaveSnapshot, patch: UnlockPatch): String {
-        require(pending().isEmpty()) { "有未完成的写回，请先恢复" }
-        val proposed = mutableMapOf(snapshot.prefs.path to patch.prefs)
+        val proposed = mutableMapOf(requireNotNull(snapshot.prefs).path to patch.prefs)
         snapshot.game?.let { proposed[it.path] = requireNotNull(patch.game) }
-        return commit(snapshot, proposed)
+        return apply(snapshot, SavePlan(proposed, patch.changes))
+    }
+
+    @Synchronized fun apply(snapshot: SaveSnapshot, plan: SavePlan): String {
+        require(pending().isEmpty()) { "有未完成的写回，请先恢复" }
+        require(snapshot.files.map { it.path }.distinct().size == snapshot.files.size) { "存档路径重复" }
+        val originals = snapshot.files.associate { it.path to it.bytes }
+        require(plan.outputs.isNotEmpty() && plan.outputs.keys.all { it in originals }) { "修改目标不在扫描结果中" }
+        require(plan.outputs.values.all { it.size in 1..UnlockEngine.MAX_BYTES }) { "修改结果超过文件大小限制" }
+        return commit(snapshot, originals + plan.outputs)
     }
 
     private fun commit(snapshot: SaveSnapshot, proposed: Map<String, ByteArray>): String {
@@ -66,7 +81,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         // Recheck every captured file, even an unchanged mirror, after stopping the game.
         snapshot.files.forEach { require(same(it, device.read(it.path))) { "存档已在扫描后变化；请重新扫描，不覆盖新进度" } }
         val changed = snapshot.files.filter { !it.bytes.contentEquals(proposed.getValue(it.path)) }
-        require(changed.isNotEmpty()) { "所选内容已解锁，没有需要写回的变化" }
+        require(changed.isNotEmpty()) { "所选内容没有需要写回的变化" }
         val id = "${System.currentTimeMillis()}-${UUID.randomUUID()}"
         val folder = File(directory, id).apply { check(mkdir()) }
         val entries = changed.mapIndexed { index, original ->
@@ -80,7 +95,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         }
         persist(File(folder, "manifest.json"), buildJsonObject {
             put("schema", 1); put("package", snapshot.packageName); put("user", snapshot.user)
-            put("prefsPath", snapshot.prefs.path); snapshot.game?.let { put("gamePath", it.path) }
+            snapshot.prefs?.let { put("prefsPath", it.path) }; snapshot.game?.let { put("gamePath", it.path) }
             put("entries", JsonArray(entries))
         }.toString())
         status(folder, "prepared")

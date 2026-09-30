@@ -2,32 +2,50 @@ package com.example.soul_knight_save_editor.unlock
 
 import android.app.Activity
 import android.net.Uri
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.example.soul_knight_save_editor.R
 import java.text.SimpleDateFormat
@@ -53,16 +71,53 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
 @Composable fun AssistantApp(model: AssistantModel, chooseFolder: () -> Unit, openFolder: () -> Unit) {
     val state = model.state
     val view = LocalView.current
-    SideEffect { (view.context as? Activity)?.window?.let { WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = state.mode == AssistantMode.QUICK } }
-    BackHandler(state.mode != null && state.preview == null) {
-        if (state.busy) model.notice("操作进行中，请等待完成")
-        else when (state.page) {
-            AssistantPage.WORKSPACE -> model.guide()
-            AssistantPage.BACKUPS -> model.page(AssistantPage.WORKSPACE)
-            AssistantPage.SETTINGS -> model.page(if (state.mode == AssistantMode.QUICK) state.settingsReturnPage else AssistantPage.WORKSPACE)
+    var headerCompact by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val cheerTrigger = remember(model) { CheerTrigger(model.hasDiscoveredCheer()) }
+    var cheerFirst by remember { mutableStateOf<Boolean?>(null) }
+    var cheerToast by remember { mutableStateOf<Toast?>(null) }
+    DisposableEffect(Unit) { onDispose { cheerToast?.cancel() } }
+    val titleClick = {
+        headerCompact = false
+        if (!state.busy) {
+            val event = cheerTrigger.tap(SystemClock.elapsedRealtime())
+            if (event.triggered) {
+                cheerToast?.cancel()
+                if (event.firstDiscovery) model.markCheerDiscovered()
+                cheerFirst = event.firstDiscovery
+            } else event.hint?.let { hint ->
+                cheerToast?.cancel()
+                cheerToast = Toast.makeText(context, hint, Toast.LENGTH_SHORT).also { it.show() }
+            }
         }
     }
-    Crossfade(targetState = state.mode to state.page, animationSpec = tween(260), label = "screen-fade") { (mode, page) ->
+    LaunchedEffect(state.mode, state.page, state.workspaceTab) { headerCompact = false }
+    val headerScroll = remember(state.mode, state.page, state.workspaceTab) {
+        object : NestedScrollConnection {
+            var distance = 0f
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput && consumed.y != 0f) {
+                    if (distance * consumed.y < 0) distance = 0f
+                    distance += consumed.y
+                    if (distance < -24f) headerCompact = true
+                    if (distance > 24f) headerCompact = false
+                }
+                return Offset.Zero
+            }
+        }
+    }
+    SideEffect { (view.context as? Activity)?.window?.let { WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = state.mode == AssistantMode.QUICK } }
+    BackHandler(state.mode != null && state.preview == null && state.applyOutcome == null) {
+        if (state.busy) model.notice("操作进行中，请等待完成")
+        else model.back()
+    }
+    AnimatedContent(targetState = state.mode to state.page, label = "mode-transition", transitionSpec = {
+        if (initialState.first != targetState.first)
+            (fadeIn(tween(240)) + scaleIn(tween(340), initialScale = .95f) + slideInVertically(tween(340)) { it / 14 }) togetherWith
+                (fadeOut(tween(150)) + scaleOut(tween(220), targetScale = 1.03f) + slideOutVertically(tween(220)) { -it / 18 })
+        else (fadeIn(tween(180)) + slideInHorizontally(tween(240)) { it / 16 }) togetherWith
+            (fadeOut(tween(120)) + slideOutHorizontally(tween(180)) { -it / 16 })
+    }) { (mode, page) ->
         val palette = when (mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors }
         MaterialTheme(colorScheme = palette) {
             Box(Modifier.fillMaxSize()) {
@@ -71,21 +126,24 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
                 if (mode == null) Box(Modifier.matchParentSize().background(Brush.verticalGradient(
                     listOf(Color(0xFF837397).copy(alpha = .86f), Color(0xFF5D506E).copy(alpha = .88f)))))
                 else Box(Modifier.matchParentSize().background(palette.background.copy(alpha = if (mode == AssistantMode.EXPERT) .60f else .68f)))
-                Column(Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxSize().safeDrawingPadding().padding(horizontal = 18.dp)) {
-                    Header(mode, page, state.busy, model)
+                Column(Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxSize().safeDrawingPadding().padding(horizontal = 18.dp).nestedScroll(headerScroll)) {
+                    AnimatedHeader(mode, page, state.busy, headerCompact, titleClick, model::guide,
+                        { model.page(AssistantPage.SETTINGS) }, model::back)
                     if (mode == null) Guide(model, Modifier.weight(1f))
                     else when (page) {
-                        AssistantPage.WORKSPACE -> Workspace(model, mode, Modifier.weight(1f))
+                        AssistantPage.WORKSPACE -> WorkspaceContent(model, mode, Modifier.weight(1f))
                         AssistantPage.BACKUPS -> Backups(model, chooseFolder, openFolder, Modifier.weight(1f))
                         AssistantPage.SETTINGS -> Settings(model, Modifier.weight(1f))
                     }
-                    if (mode == AssistantMode.QUICK && page != AssistantPage.SETTINGS) QuickTabs(state, model)
+                    if (mode != null && page == AssistantPage.WORKSPACE) MainTabs(state, model)
                 }
             }
         }
     }
     MaterialTheme(colorScheme = when (state.mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors }) {
         Preview(model)
+        state.applyOutcome?.let { ApplyOutcomeDialog(it, model::dismissApplyOutcome) }
+        cheerFirst?.let { first -> ShowcheerEgg(first) { cheerFirst = null } }
         if (state.consentPromptVisible) AlertDialog(onDismissRequest = model::declinePersonalUse,
             title = { Text("个人本地存档使用确认") },
             text = { Text("本工具只应处理你有权访问的个人手机或虚拟机上的本地存档。修改前请查看预览并保留备份；修改结果及使用后果由你自行确认。确认后才可使用写入功能。") },
@@ -94,63 +152,31 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
     }
 }
 
-@Composable private fun Header(mode: AssistantMode?, page: AssistantPage, busy: Boolean, model: AssistantModel) {
-    Surface(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 14.dp), shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = if (mode == null) .70f else if (mode == AssistantMode.EXPERT) .82f else .80f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primary) {
-                Text("SK", Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
-            }
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                Text("骑士档案馆", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                Text(if (mode == null) "先选模式 · 随时可切换" else "本地存档助手 · 离线运行",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (mode != null) {
-                if (mode == AssistantMode.QUICK) {
-                    if (page == AssistantPage.SETTINGS) TextButton({ model.page(model.state.settingsReturnPage) }, enabled = !busy) { Text("返回") }
-                    else {
-                        TextButton(model::guide, enabled = !busy) { Text("模式") }
-                        TextButton({ model.page(AssistantPage.SETTINGS) }, enabled = !busy) { Text("设置") }
-                    }
-                } else if (page == AssistantPage.WORKSPACE) {
-                    TextButton({ model.page(AssistantPage.BACKUPS) }, enabled = !busy) { Text("备份") }
-                    TextButton({ model.page(AssistantPage.SETTINGS) }, enabled = !busy) { Text("设置") }
-                } else TextButton({ model.page(AssistantPage.WORKSPACE) }, enabled = !busy) { Text("返回") }
-            }
-        }
-    }
+/** Add future features here: stable tab ID, label and renderer. Navigation has no fixed tab count. */
+private data class WorkspaceSection(val tab: WorkspaceTab, val render: @Composable (AssistantModel, AssistantMode, Modifier) -> Unit)
+private val workspaceSections = listOf(
+    WorkspaceSection(WorkspaceTabs.saves) { model, _, modifier -> SavesPage(model, modifier) },
+    WorkspaceSection(WorkspaceTabs.characters) { model, mode, modifier -> CharactersPage(model, mode, modifier) },
+    WorkspaceSection(WorkspaceTabs.items) { model, mode, modifier -> ItemsPage(model, mode, modifier) },
+    WorkspaceSection(WorkspaceTabs.weapons) { model, mode, modifier -> WeaponsPage(model, mode, modifier) }
+)
+
+@Composable private fun WorkspaceContent(model: AssistantModel, mode: AssistantMode, modifier: Modifier) {
+    val holder = rememberSaveableStateHolder()
+    val section = workspaceSections.firstOrNull { it.tab.id == model.state.workspaceTab } ?: workspaceSections.first()
+    holder.SaveableStateProvider(section.tab.id) { section.render(model, mode, modifier) }
 }
 
-@Composable private fun QuickTabs(state: AssistantState, model: AssistantModel) {
-    Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = .96f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .65f))) {
-        Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf(AssistantPage.WORKSPACE to "一键解锁", AssistantPage.BACKUPS to "备份与恢复").forEach { (target, label) ->
-                val selected = state.page == target
-                Surface(onClick = { model.page(target) }, enabled = !state.busy && state.mode == AssistantMode.QUICK,
-                    modifier = Modifier.weight(1f).testTag(if (target == AssistantPage.WORKSPACE) "quick-tab-unlock" else "quick-tab-backup"),
-                    shape = RoundedCornerShape(15.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface) {
-                    Box(Modifier.heightIn(min = 54.dp), contentAlignment = Alignment.Center) {
-                        Text(label + if (target == AssistantPage.BACKUPS && state.pending.isNotEmpty()) " •" else "",
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-                    }
-                }
-            }
-        }
-    }
+@Composable private fun MainTabs(state: AssistantState, model: AssistantModel) {
+    WorkspaceTabBar(state, workspaceSections.map { it.tab }, model::tab)
 }
 
 @Composable private fun Guide(model: AssistantModel, modifier: Modifier) {
     val state = model.state
     Column(modifier.padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ModeCard("快捷解锁", "一键处理已有内容", "选择角色、皮肤、等级或技能；预览后再应用。", false,
+        ModeCard("快速模式", "角色、物品与武器快捷修改", "选择角色、物品或武器获取次数；预览后再应用。", false,
             Modifier.weight(1f).fillMaxWidth()) { model.chooseMode(AssistantMode.QUICK) }
-        ModeCard("详细选择", "按角色与皮肤逐项选择", "适合想精确控制解锁范围的玩家。", true,
+        ModeCard("专家模式", "角色、物品与武器逐项选择", "选择条目与参数，预览后统一写回。", true,
             Modifier.weight(1f).fillMaxWidth()) { model.chooseMode(AssistantMode.EXPERT) }
         Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .78f),
             contentColor = MaterialTheme.colorScheme.onSurface) {
@@ -181,76 +207,111 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
     }
 }
 
-@Composable private fun Workspace(model: AssistantModel, renderMode: AssistantMode, modifier: Modifier) {
+@Composable private fun CharactersPage(model: AssistantModel, renderMode: AssistantMode, modifier: Modifier) {
     val state = model.state
     val catalog = state.catalog
     val quick = renderMode == AssistantMode.QUICK
     var query by rememberSaveable { mutableStateOf("") }
+    var selectedOnly by rememberSaveable { mutableStateOf(false) }
     Column(modifier) {
-        if (!quick) Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(model::guide, enabled = !state.busy && state.mode == renderMode, modifier = Modifier.testTag("return-mode-selection")) { Text("← 选择模式") }
-            Spacer(Modifier.weight(1f))
-            Text("详细选择", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-        }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
-            item { Panel {
-                Text(if (catalog == null) "从你的存档开始" else "本地存档已就绪", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(if (catalog == null) "扫描仅访问所选游戏的本地目录。" else "${accountLabel(catalog.account)} · ${catalog.heroes.size} 个角色 · ${catalog.heroes.sumOf { it.skins.size }} 个皮肤", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(state.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(model::scan, enabled = !state.busy && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth()) { Text(if (catalog == null) "Root 扫描存档" else "重新扫描") }
-                Text("扫描会关闭游戏；操作结束后你可以自行打开。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item { Panel(title = "角色", help = HelpTopics.roles) {
+                catalog?.let { Text(accountLabel(it.account), style = MaterialTheme.typography.labelSmall) }
+                if (catalog == null) {
+                    Text("请先读取存档。")
+                    OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("前往存档") }
+                }
             } }
-            if (catalog != null && quick) item { Panel {
-                Text("这次想修改什么？", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (catalog != null && quick && catalog.heroes.isNotEmpty()) item { Panel(title = "角色与技能", help = HelpTopics.roles) {
                 CheckLine("全部角色解锁", state.choices.quickRoles, !state.busy) { model.quick(roles = it) }
                 CheckLine("全部皮肤解锁", state.choices.quickSkins, !state.busy) { model.quick(skins = it) }
-                CheckLine("角色等级至少 7 级", state.choices.quickLevels, !state.busy && !catalog.xmlOnly) { model.quick(levels = it) }
-                CheckLine("解锁已有技能条目", state.choices.quickSkills, !state.busy && !catalog.xmlOnly) { model.quick(skills = it) }
-                Text(if (catalog.xmlOnly) "当前只有 XML；等级与技能需 game.data 双文件核对。" else "四项默认不选。高于 7 级的角色保持原等级；只处理现有技能条目。",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                CheckLine("角色等级至少 7 级", state.choices.quickLevels, !state.busy && !catalog.xmlOnly && state.progression.isNotEmpty() && state.progression.all { it.level != null }) { model.quick(levels = it) }
+                CheckLine("解锁已有技能条目", state.choices.quickSkills, !state.busy && !catalog.xmlOnly && state.progression.isNotEmpty() && state.progression.all { it.skillError == null }) { model.quick(skills = it) }
+                if (catalog.xmlOnly) Text("等级与技能暂不可用", style = MaterialTheme.typography.labelSmall)
                 if (!state.personalUseAccepted) TextButton(model::requestConsent) { Text("先确认个人使用约定") }
+            } }
+            if (catalog != null && quick) item { Panel(title = "宠物", help = HelpTopics.pets) {
+                Text(state.petMessage, style = MaterialTheme.typography.bodySmall)
+                CheckLine("解锁已有宠物（${state.petStates.size} 项）", state.choices.quickPets,
+                    !state.busy && state.petStates.isNotEmpty()) { model.quick(pets = it) }
             } }
             item { Status(state) }
             if (state.pending.isNotEmpty()) item { Panel {
                 Text("有未完成的写回，请先恢复", fontWeight = FontWeight.Bold)
                 Button({ model.page(AssistantPage.BACKUPS) }, enabled = !state.busy) { Text("前往备份与恢复") }
             } }
-            if (!quick && state.accounts.size > 1) item { Panel {
-                Text("选择账号")
-                state.accounts.forEach { account -> OutlinedButton({ model.account(account) }, enabled = !state.busy) { Text(accountLabel(account)) } }
-            } }
             if (catalog != null && !quick) {
-                item { Panel {
-                    Text("只选择你需要的内容", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(query, { query = it }, label = { Text("名称、内部名或 c 编号") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Text("皮肤编号不是游戏界面的排列顺序。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                item { Panel(title = "选择角色", help = HelpTopics.roles) {
+                    OutlinedTextField(query, { query = it }, label = { Text("角色名称或编号") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    CheckLine("只看已选角色条目", selectedOnly, true) { selectedOnly = it }
                 } }
-                val heroes = catalog.heroes.filter { it.label().contains(query, true) || it.name.contains(query, true) }
+                val selected = state.choices.expert
+                val heroes = catalog.heroes.filter { (it.label().contains(query, true) || it.name.contains(query, true)) &&
+                    (!selectedOnly || it.index in selected.heroes || it.index in selected.levelHeroes || selected.skins.any { skin -> skin.hero == it.index } || selected.skillIds.any { skill -> skill.hero == it.index }) }
                 if (heroes.isEmpty()) item { Panel { Text("没有匹配条目，试试角色内部名或编号。") } }
+                item { Panel(title = "批量选择", help = HelpTopics.roles) {
+                    val selected = state.choices.expert
+                    Text("角色 ${selected.heroes.size} · 皮肤 ${selected.skins.size} · 等级 ${selected.levelHeroes.size} · 技能 ${selected.skillIds.size} · 宠物 ${selected.petIds.size} 项待修改")
+                    TextButton({ model.select(selected.copy(heroes = selected.heroes + heroes.filter { it.unlocked == false }.map { it.index },
+                        skins = selected.skins + heroes.flatMap { hero -> hero.skins.filterValues { it != 1 }.keys.map { SkinId(hero.index, it) } })) }, enabled = !state.busy) { Text("选择搜索结果的未解锁角色与皮肤") }
+                    TextButton({ model.select(UnlockSelection()) }, enabled = !state.busy) { Text("清空角色页全部选择") }
+                    TextButton({ model.select(selected.copy(levelHeroes = selected.levelHeroes + state.progression.filter { it.level != null && heroes.any { hero -> hero.index == it.hero } }.map { it.hero })) }, enabled = !state.busy) { Text("选择结果的可用等级") }
+                    TextButton({ model.select(selected.copy(skillIds = selected.skillIds + state.progression.filter { heroes.any { hero -> hero.index == it.hero } }.flatMap { progress -> progress.skills.filterValues { !it }.keys.map { SkillId(progress.hero, it) } })) }, enabled = !state.busy) { Text("选择结果的未解锁技能") }
+                } }
                 items(heroes, key = { "hero-${it.index}" }) { hero -> HeroCard(hero, state, model) }
+                item { Panel(title = "宠物 · ${state.choices.expert.petIds.size} 项待解锁", help = HelpTopics.pets) {
+                    Text(state.petMessage)
+                    TextButton({ model.select(state.choices.expert.copy(petIds = state.choices.expert.petIds + state.petStates.filter { !it.unlocked && (it.definition.label.contains(query, true) || it.definition.id.contains(query, true)) }.map { it.definition.id })) }, enabled = !state.busy) { Text("选择搜索结果的未解锁宠物") }
+                } }
+                items(state.petStates.filter { (it.definition.label.contains(query, true) || it.definition.id.contains(query, true)) && (!selectedOnly || it.definition.id in selected.petIds) }, key = { "pet-${it.definition.id}" }) { pet -> Panel(title = pet.definition.label, help = HelpTopic(pet.definition.label, "${HelpTopics.pets.text}\n\n宠物 ID：${pet.definition.id}")) {
+                    CheckLine(if (pet.unlocked) "已解锁" else "解锁此宠物", pet.unlocked || pet.definition.id in state.choices.expert.petIds,
+                        !state.busy && !pet.unlocked) { checked ->
+                        val selection = state.choices.expert
+                        model.select(selection.copy(petIds = if (checked) selection.petIds + pet.definition.id else selection.petIds - pet.definition.id))
+                    }
+                } }
+
             }
-            item { Text(if (quick) "底部切换备份与恢复；渠道设置在顶部。" else "备份与渠道设置在顶部入口，两种模式都能使用。",
-                Modifier.padding(6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
-        if (catalog != null) {
-            val selected = state.choices.selection(renderMode, catalog)
-            Button(model::preview, enabled = !state.busy && state.personalUseAccepted && state.mode == renderMode &&
-                (selected.heroes.isNotEmpty() || selected.skins.isNotEmpty() || selected.levels || selected.skills),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).heightIn(min = 52.dp)) {
-                Text(if (quick) "预览本次修改" else "预览所选 · ${selected.heroes.size} 角色 / ${selected.skins.size} 皮肤")
-            }
-        }
+        PendingEdits(state, renderMode, model::preview)
+    }
+}
+
+@Composable internal fun PendingEdits(state: AssistantState, renderMode: AssistantMode, onPreview: () -> Unit) {
+    val catalog = state.catalog ?: return
+    val quick = renderMode == AssistantMode.QUICK
+    val characters = EditEngine.hasCharacters(state.choices.selection(renderMode, catalog))
+    val items = state.itemsFor(renderMode).hasChanges
+    val weapons = if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges
+    Text("跨页待修改：角色${if (characters) "已选" else "未选"} · 物品${if (items) "已选" else "未选"} · 武器${if (weapons) "已选" else "未选"}",
+        style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
+    Button(onPreview, enabled = !state.busy && state.pending.isEmpty() && state.personalUseAccepted && state.mode == renderMode &&
+        (characters || items || weapons) && state.itemsFor(renderMode).valid && (quick || state.expertWeapons.valid),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).heightIn(min = 52.dp).testTag("preview-all-edits")) {
+        Text("预览全部待修改内容")
     }
 }
 
 @Composable private fun HeroCard(hero: Hero, state: AssistantState, model: AssistantModel) {
     var expanded by rememberSaveable(hero.index) { mutableStateOf(false) }
     val selection = state.choices.expert
-    Panel {
-        Text(hero.label(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Panel(title = hero.label(), help = HelpTopics.roles) {
         Text("${hero.skins.count { it.value == 1 }}/${hero.skins.size} 皮肤已解锁", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (hero.unlocked != null) CheckLine(if (hero.unlocked) "角色已解锁" else "解锁角色", hero.unlocked || hero.index in selection.heroes, !state.busy && !hero.unlocked) {
             model.select(selection.copy(heroes = if (it) selection.heroes + hero.index else selection.heroes - hero.index))
+        }
+        val progress = state.progression.firstOrNull { it.hero == hero.index }
+        CheckLine("等级至少 7 · 当前 ${progress?.level ?: "不可用"}", hero.index in selection.levelHeroes,
+            !state.busy && progress?.level != null) {
+            model.select(selection.copy(levelHeroes = if (it) selection.levelHeroes + hero.index else selection.levelHeroes - hero.index))
+        }
+        progress?.levelError?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+        progress?.skillError?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
+        progress?.skills?.forEach { (id, unlocked) ->
+            val skill = SkillId(hero.index, id)
+            CheckLine("技能 #$id${if (unlocked) " · 已解锁" else ""}", unlocked || skill in selection.skillIds, !state.busy && !unlocked) {
+                model.select(selection.copy(skillIds = if (it) selection.skillIds + skill else selection.skillIds - skill))
+            }
         }
         Row {
             TextButton({ model.select(selection.copy(skins = selection.skins + hero.skins.filterValues { it != 1 }.keys.map { SkinId(hero.index, it) })) }, enabled = !state.busy) { Text("选择未解锁皮肤") }
@@ -272,28 +333,28 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
         item { Panel {
             Text("备份与恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("把原件留在自己手里", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("当前版本：${state.packageName}", style = MaterialTheme.typography.labelSmall)
             Text("当前存档备份包含本地 .data 分片与识别到的 XML，不含 .data.new 或其他账号配置。备份含个人存档，请勿公开分享。", style = MaterialTheme.typography.bodySmall)
         } }
-        item { Panel {
-            Text("备份文件夹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        item { Panel(title = "备份文件夹", help = HelpTopics.backups) {
             Text(state.folder?.let { BackupDestination.label(Uri.parse(it)) } ?: "尚未选择。建议在“文档”中建立专用文件夹。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(chooseFolder, enabled = !state.busy, modifier = Modifier.weight(1f)) { Text(if (state.folder == null) "选择文件夹" else "更换目录") }
                 OutlinedButton(openFolder, enabled = !state.busy && state.folder != null, modifier = Modifier.weight(1f)) { Text("打开文件夹") }
             }
             CheckLine("导出成功后自动打开文件夹", state.autoOpenFolder, !state.busy, model::autoOpen)
-            Text("通过系统目录界面查看备份，按返回即可；不会导入或恢复文件。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(model::backupNow, enabled = !state.busy && state.folder != null && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth()) { Text("备份当前本地存档") }
-            Text("会关闭游戏并读取原件，不修改任何游戏文件。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
         item { Status(state) }
         items(state.pending, key = { "pending-$it" }) { id -> Panel {
             Text("未完成的写回", fontWeight = FontWeight.Bold)
+            Text(state.pendingPackages[id] ?: "待核对目标", style = MaterialTheme.typography.labelSmall)
             Text(timestamp(id.substringBefore('-').toLongOrNull() ?: 0))
             Button({ model.restore(id, true) }, enabled = !state.busy) { Text("恢复未完成事务") }
         } }
-        if (state.archives.isNotEmpty()) item { Section("已生成的备份包", "应用内还保留一份副本；外部目录中的文件不受卸载助手影响。") }
-        items(state.archives, key = { it.file.name }) { info -> Panel {
+        val archives = state.archives.filter { it.packageName == state.packageName }
+        if (archives.isNotEmpty()) item { Section("当前版本的备份包", "应用内还保留一份副本；外部目录中的文件不受卸载助手影响。") }
+        items(archives, key = { it.file.name }) { info -> Panel {
             Text(if (info.kind == "local-save") "当前本地存档" else "修改前原件", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("${timestamp(info.createdAt)} · ${info.count} 个文件 · ${info.file.length() / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(info.packageName, style = MaterialTheme.typography.labelSmall)
@@ -307,11 +368,7 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
                 if (id in state.backups) TextButton({ restoreId = id }, enabled = !state.busy && state.pending.isEmpty()) { Text("恢复原件") }
             }
         } }
-        item { Panel {
-            Text("关于恢复", fontWeight = FontWeight.Bold)
-            Text("当前只恢复助手自己的写前备份。游戏已有新变化时会停止覆盖。暂不提供 ZIP 导入或跨账号复制。", style = MaterialTheme.typography.bodySmall)
-            Text("未导出的应用内备份会随助手卸载而丢失。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } }
+
     }
     restoreId?.let { id -> AlertDialog(onDismissRequest = { restoreId = null }, title = { Text("恢复修改前原件？") },
         text = { Text("会关闭游戏并核对文件。若游戏已产生后续变化，将拒绝覆盖，保留备份。") },
@@ -323,9 +380,9 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Panel {
             Text("公共设置", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("不必进入详细模式，也能配置自己的渠道。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedTextField(state.packageName, model::packageName, label = { Text("游戏渠道包名") }, enabled = !state.busy, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Text("更换包名后会清空扫描结果与待执行选择。", style = MaterialTheme.typography.bodySmall)
+            Text("当前游戏：${state.packageName}", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("选择游戏与扫描存档") }
+            Button({ model.page(AssistantPage.BACKUPS) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("settings-backups")) { Text("备份与恢复${if (state.pending.isNotEmpty()) " · 有待恢复事务" else ""}") }
         } }
         item { Panel {
             Text("启动与模式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -334,7 +391,7 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
         } }
         item { Panel {
             Text("共同的边界", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("两种模式使用相同的扫描、备份和写回校验。快捷模式可选择将现有角色提升至至少 7 级、解锁已有技能；详细模式仍只处理角色与皮肤。不操作 .data.new、货币及游玩记录。")
+            Text("两种模式使用相同的备份和写回校验。快捷模式提供角色、宠物、等级、技能及已确认物品操作；详细模式仍只处理角色与皮肤。不操作 .data.new 及游玩记录。")
             if (!state.personalUseAccepted) OutlinedButton(model::requestConsent) { Text("确认个人使用约定") }
             Text("本地运行，无联网权限", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
@@ -343,28 +400,76 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
 
 @Composable private fun Preview(model: AssistantModel) {
     val state = model.state
-    state.preview?.let { patch -> AlertDialog(onDismissRequest = model::dismiss, title = { Text(if (state.previewMode == AssistantMode.QUICK) "确认快捷解锁" else "确认所选解锁") }, text = {
+    var expanded by remember(state.preview) { mutableStateOf(false) }
+    state.preview?.let { patch -> AlertDialog(onDismissRequest = model::dismiss, title = { FeatureTitle("确认本次修改", HelpTopic("修改说明", "目标版本：${state.snapshot?.packageName}\n\n应用前会关闭游戏、核对原件、创建备份并写入。账号已有的本地读取开关会设为 0；缺失开关不新增。切换模式不会混入另一套草稿。")) }, text = {
         LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text("将关闭游戏、核对原件、创建备份并写回。现有本地读取开关会设为 0，不操作云存档。") }
-            items(patch.changes) { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+            item { Text("${state.catalog?.account?.let(::accountLabel)} · ${if (state.previewMode == AssistantMode.QUICK) "快速模式" else "专家模式"}\n将修改 ${patch.outputs.size} 份存档，修改前会自动备份。") }
+            items(patch.sections.entries.toList()) { (name, entries) -> Text("$name：${entries.size} 项变化", fontWeight = FontWeight.Bold) }
+            item { TextButton({ expanded = !expanded }) { Text(if (expanded) "收起逐项变化" else "展开 ${patch.changes.size} 项变化") } }
+            if (expanded) items(patch.changes) { Text("• $it", style = MaterialTheme.typography.bodySmall) }
         }
     }, confirmButton = { Button(model::apply, enabled = !state.busy) { Text("备份并应用") } }, dismissButton = { TextButton(model::dismiss) { Text("取消") } }) }
 }
 
-@Composable private fun Panel(content: @Composable ColumnScope.() -> Unit) {
+@Composable internal fun ApplyOutcomeDialog(outcome: ApplyOutcome, onDismiss: () -> Unit) {
+    var expanded by remember(outcome) { mutableStateOf(false) }
+    val accent = if (outcome.succeeded) Color(0xFF218548) else Color(0xFFB3261E)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("apply-outcome-dialog"),
+        title = {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(88.dp).background(accent.copy(alpha = .12f), CircleShape),
+                    contentAlignment = Alignment.Center) {
+                    Text(if (outcome.succeeded) "✓" else "!", color = accent, fontSize = 56.sp,
+                        fontWeight = FontWeight.Bold, modifier = Modifier.testTag("apply-outcome-symbol"))
+                }
+                Text(if (outcome.succeeded) "修改成功" else "修改未完成", style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(outcome.packageName, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (outcome.succeeded) "${outcome.fileCount} 个文件已写入并校验。请进入游戏确认显示结果。"
+                    else "本次事务没有完成，请查看失败原因和备份状态。")
+                TextButton({ expanded = !expanded }, modifier = Modifier.testTag("apply-outcome-toggle")) {
+                    Text(if (expanded) "收起详细信息" else "展开详细信息")
+                }
+                if (expanded) LazyColumn(Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("apply-outcome-details"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    item { Text("成功项（${outcome.successful.size}）", fontWeight = FontWeight.SemiBold) }
+                    items(outcome.successful) { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    item { Text("失败项（${outcome.failed.size}）", fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 6.dp)) }
+                    if (outcome.failed.isEmpty()) item { Text("无", style = MaterialTheme.typography.bodySmall) }
+                    else items(outcome.failed) { Text(it, style = MaterialTheme.typography.bodySmall, color = accent) }
+                }
+            }
+        },
+        confirmButton = { Button(onDismiss) { Text("完成") } }
+    )
+}
+
+@Composable internal fun Panel(title: String? = null, help: HelpTopic? = null, content: @Composable ColumnScope.() -> Unit) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .97f), contentColor = MaterialTheme.colorScheme.onSurface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (title != null) FeatureTitle(title, help)
+            content()
+        }
     }
 }
-@Composable private fun Status(state: AssistantState) {
+@Composable internal fun Status(state: AssistantState) {
     Panel { if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth()); Text(state.message, style = MaterialTheme.typography.bodySmall) }
 }
 @Composable private fun Section(title: String, description: String) {
     Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) { Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
 }
-@Composable private fun CheckLine(label: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+@Composable internal fun CheckLine(label: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).toggleable(checked, enabled = enabled, role = Role.Checkbox, onValueChange = onChange).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked, null, enabled = enabled)
         Text(label, Modifier.weight(1f).padding(start = 4.dp), style = MaterialTheme.typography.bodyMedium)
