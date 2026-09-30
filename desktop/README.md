@@ -2,6 +2,8 @@
 
 本目录是原有的 Python / PySide6 存档编辑器，和 `../android/` 是独立客户端。它通过本地 `输入/`、`参考/`、`输出/` 工作，不直接连接手机或修改游戏私有目录。
 
+旧版“武器获取次数 +8”实际修改 `_weaponUsedTimes`。8.6.0 实测确认正确目标为统计文件顶层 `object2ObtainTime`；桌面代码尚未迁移这个新规则，不能用旧按钮判断锻造资格。Android alpha11 已接入正确字段，详见[武器调查](../docs/weapon-forge-investigation-8.6.0.md)和[新功能规则](../docs/quick-weapons-alpha11.md)。
+
 ## 启动
 
 需要 Python 3.8+。在**本目录**执行：

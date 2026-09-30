@@ -9,12 +9,14 @@ import java.util.concurrent.TimeUnit
 
 /** No networking, hooks, cloud files, global filesystem scans or caller-provided shell commands. */
 class RootStorage : DeviceStorage, Closeable {
-    private val packagePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
-    private val pathPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files(?:/[a-zA-Z0-9_.-]+)?/game\\.data|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
+    private val packagePattern = SaveLayout.packagePattern
+    private val pathPattern = SaveLayout.editablePath
     private fun quote(text: String) = "'" + text.replace("'", "'\\''") + "'"
 
     private var session: Process? = null
     private var reader: BufferedReader? = null
+    private var cancelled: (() -> Boolean)? = null
+    private fun checkCancellation() { if (cancelled?.invoke() == true) throw DiscoveryCancelled() }
     override fun close() {
         runCatching { session?.outputStream?.close() }
         session?.destroy()
@@ -24,6 +26,7 @@ class RootStorage : DeviceStorage, Closeable {
 
     /** One short-lived root shell per user operation, not a new permission request per file command. */
     @Synchronized private fun run(command: String, input: ByteArray? = null): String {
+        checkCancellation()
         if (session == null) {
             session = try { ProcessBuilder("su").redirectErrorStream(true).start() } catch (_: Exception) { error("未找到 Root，请开启 Root 并授权后重试") }
             reader = session!!.inputStream.bufferedReader(Charsets.UTF_8)
@@ -55,9 +58,20 @@ class RootStorage : DeviceStorage, Closeable {
         try {
             process.outputStream.write(script.toByteArray(Charsets.UTF_8))
             process.outputStream.flush()
-            val (exit, out) = output.get(45, TimeUnit.SECONDS)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(45)
+            var completed: Pair<Int, String>? = null
+            while (completed == null) {
+                checkCancellation()
+                if (System.nanoTime() >= deadline) throw java.util.concurrent.TimeoutException()
+                try { completed = output.get(200, TimeUnit.MILLISECONDS) }
+                catch (_: java.util.concurrent.TimeoutException) { /* Poll cancellation without killing a normal write. */ }
+            }
+            val (exit, out) = completed
             require(exit == 0) { "Root ${command.substringBefore(' ')} 操作未成功（退出码 $exit），请确认授权和设备状态" }
             return out
+        } catch (error: DiscoveryCancelled) {
+            close()
+            throw error
         } catch (error: java.util.concurrent.TimeoutException) {
             close()
             throw IllegalStateException("Root 操作超时；如已开始写回，请先检查恢复提示", error)
@@ -111,24 +125,72 @@ class RootStorage : DeviceStorage, Closeable {
         run(command, encoded)
     }
 
-    fun scan(packageName: String, user: Int): SaveSnapshot {
-        stop(packageName, user)
-        val root = "/data/user/$user/$packageName"
-        require(run("test -d ${quote(root)} && echo yes").trim() == "yes") { "未找到该渠道的应用数据，请确认包名" }
-        fun find(dir: String, depth: Int, name: String): List<String> {
-            val q = quote("$root/$dir")
-            return run("if test -d $q; then find $q -maxdepth $depth -type f -name ${quote(name)}; fi")
-                .lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList().also { require(it.size <= 128) { "候选文件过多，暂不自动选择" } }
+    private fun scanAccess(): SaveScanAccess = object : SaveScanAccess {
+        override fun stop(packageName: String, user: Int) = this@RootStorage.stop(packageName, user)
+        override fun exists(directory: String) = run("test -d ${quote(directory)} && echo yes").trim() == "yes"
+        override fun read(path: String) = this@RootStorage.read(path)
+        override fun list(root: String, source: SaveSource): List<String> {
+            val q = quote("$root/${source.directory}")
+            return run("if test -d $q; then find $q -maxdepth ${source.depth} -type f -name ${quote(source.glob)}; fi")
+                .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
         }
-        val gamePaths = find("files", 2, "game.data")
-        require(gamePaths.size <= 1) { "找到多份 game.data，无法确定当前使用哪份，已保持只读" }
-        val game = gamePaths.singleOrNull()?.let(::read)?.also { UnlockEngine.game(it.bytes) }
-        val candidates = find("shared_prefs", 1, "*.xml").mapNotNull { path ->
-            val file = read(path)
-            if (UnlockEngine.recognizesPrefs(file.bytes)) file else null
-        }
-        require(candidates.size == 1) { if (candidates.isEmpty()) "尚未识别到角色/皮肤存档，请先在游戏中生成存档，或检查渠道包名" else "找到多份包含角色特征的 XML，暂不自动选择" }
-        return SaveSnapshot(packageName, user, candidates.single(), game)
+    }
+    fun scan(packageName: String, user: Int): SaveSnapshot = SaveScanner.scan(scanAccess(), packageName, user)
+    fun refresh(target: PinnedSaveTarget): SaveSnapshot = SaveScanner.refresh(scanAccess(), target)
+
+    /** Read-only fallback across installed third-party packages of this Android user. Never force-stops candidates. */
+    fun discover(user: Int, preferred: String, ownPackage: String, isCancelled: () -> Boolean,
+        progress: (DiscoveryProgress) -> Unit, found: (GameCandidate) -> Unit): DiscoveryProgress {
+        require(user >= 0)
+        cancelled = isCancelled
+        try {
+            require(run("id").contains("uid=0")) { "请授予 Root 权限后再搜索" }
+            val packages = SaveDiscovery.packages(run("pm list packages -3 --user $user"), preferred, ownPackage)
+            require(packages.size <= SaveDiscovery.MAX_PACKAGES) { "已安装应用超过搜索上限，请手动填写目标包名" }
+            var state = DiscoveryProgress(total = packages.size)
+            val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(2)
+            progress(state)
+            for (pkg in packages) {
+                checkCancellation()
+                if (System.nanoTime() >= deadline) return state
+                try {
+                    val root = "/data/user/$user/$pkg"
+                    val prefs = quote("$root/shared_prefs")
+                    val files = quote("$root/files")
+                    // grep only prefilters small XML files; a strict parser verifies the actual keys below.
+                    val paths = run("if test -d $prefs; then find $prefs -maxdepth 1 -type f -name '*.xml' -size -1048576c -exec grep -l -E 'c[0-9]+_(unlock|skin[0-9]+)' {} \\; | head -n 13; fi; " +
+                        "if test -d $files; then find $files -maxdepth 2 -type f \\( -name 'game.data' -o -name 'item_data*.data' \\) | head -n 13; fi")
+                        .lineSequence().map(String::trim).filter { pathPattern.matches(it) && !it.contains("..") && it.startsWith("$root/") }.distinct().toList()
+                    val evidence = linkedSetOf<String>()
+                    var incomplete = paths.size > SaveDiscovery.MAX_PROBES
+                    for (path in paths.take(SaveDiscovery.MAX_PROBES)) {
+                        checkCancellation()
+                        if (System.nanoTime() >= deadline) { incomplete = true; break }
+                        try {
+                            val name = path.substringAfterLast('/')
+                            if (name.endsWith(".xml") && "XML 角色／皮肤特征" in evidence || name.startsWith("item_data") && "物品分片结构" in evidence) continue
+                            val bytes = read(path).bytes
+                            when {
+                                name.endsWith(".xml") && SaveDiscovery.xml(bytes) -> evidence += "XML 角色／皮肤特征"
+                                name == "game.data" && SaveDiscovery.game(bytes) -> evidence += "game 角色／皮肤结构"
+                                EditEngine.itemAccount(path) != null && SaveDiscovery.item(bytes) -> evidence += "物品分片结构"
+                            }
+                        } catch (error: DiscoveryCancelled) { throw error }
+                        catch (_: Exception) { incomplete = true }
+                    }
+                    if (evidence.isNotEmpty()) {
+                        val version = runCatching { run("dumpsys package ${quote(pkg)} | grep -m 1 'versionName='").trim().substringAfter("versionName=", "未知版本").take(80) }.getOrDefault("未知版本")
+                        checkCancellation()
+                        found(GameCandidate(pkg, version = version, evidence = evidence.toList()))
+                    }
+                    if (incomplete) state = state.copy(skipped = state.skipped + 1)
+                } catch (error: DiscoveryCancelled) { throw error }
+                catch (_: Exception) { state = state.copy(skipped = state.skipped + 1) }
+                state = state.copy(checked = state.checked + 1)
+                progress(state)
+            }
+            return state
+        } finally { cancelled = null }
     }
 
     /** Local .data files are copied as opaque bytes; this does not grant write access to them. */
@@ -138,8 +200,8 @@ class RootStorage : DeviceStorage, Closeable {
         val paths = run("if test -d ${quote(root)}; then find ${quote(root)} -maxdepth 2 -type f -name '*.data'; fi")
             .lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().sorted().toList()
         require(paths.size < 128) { "本地文件过多，暂不创建备份" }
-        val files = mutableListOf(snapshot.prefs)
-        var total = snapshot.prefs.bytes.size.toLong()
+        val files = listOfNotNull(snapshot.prefs).toMutableList()
+        var total = files.sumOf { it.bytes.size.toLong() }
         paths.forEach { path ->
             val file = readFile(path, true)
             total += file.bytes.size

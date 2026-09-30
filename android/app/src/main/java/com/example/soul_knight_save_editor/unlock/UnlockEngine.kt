@@ -11,10 +11,15 @@ import org.xml.sax.InputSource
 import java.io.StringReader
 
 data class SkinId(val hero: Int, val skin: Int)
+data class SkillId(val hero: Int, val skill: Int)
+data class HeroProgress(val hero: Int, val level: Int?, val levelError: String?, val skills: Map<Int, Boolean>, val skillError: String?)
 data class Hero(val index: Int, val name: String, val unlocked: Boolean?, val skins: Map<Int, Int>)
 data class Catalog(val accounts: List<String>, val account: String, val heroes: List<Hero>, val xmlOnly: Boolean)
 data class UnlockSelection(val heroes: Set<Int> = emptySet(), val skins: Set<SkinId> = emptySet(),
-    val levels: Boolean = false, val skills: Boolean = false)
+    val levels: Boolean = false, val skills: Boolean = false, val pets: Boolean = false,
+    val levelHeroes: Set<Int> = emptySet(), val skillIds: Set<SkillId> = emptySet(), val petIds: Set<String> = emptySet()) {
+    val hasProgress get() = levels || skills || levelHeroes.isNotEmpty() || skillIds.isNotEmpty()
+}
 data class UnlockPatch(val game: ByteArray?, val prefs: ByteArray, val changes: List<String>)
 
 /** Edits only existing, verified local character keys. No generic field editor is exposed. */
@@ -37,13 +42,14 @@ object UnlockEngine {
         val root = json.parseToJsonElement(utf8(xor(bytes))).jsonObject
         val heroes = root["heroUnlock"] as? JsonObject ?: error("game.data 未识别到角色结构，暂不写入")
         val skins = root["skinLock"] as? JsonObject ?: error("game.data 未识别到皮肤结构，暂不写入")
-        require(heroes.isNotEmpty() && heroes.values.all { it is JsonPrimitive && it.booleanOrNull != null }) { "角色格式发生变化，暂不写入" }
+        require(heroes.isNotEmpty() && heroes.values.all { it is JsonPrimitive && !it.isString && it.booleanOrNull != null }) { "角色格式发生变化，暂不写入" }
         skins.forEach { (name, entries) ->
             require(name in heroes && entries is JsonArray) { "皮肤映射不完整，暂不写入" }
             val ids = entries.jsonArray.map { entry ->
                 val obj = entry.jsonObject
-                val id = obj["Key"]?.jsonPrimitive?.intOrNull
-                require(id != null && id >= 0 && obj["Value"]?.jsonPrimitive?.intOrNull != null) { "皮肤格式发生变化，暂不写入" }
+                val id = (obj["Key"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+                val state = (obj["Value"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+                require(id != null && id >= 0 && state != null) { "皮肤格式发生变化，暂不写入" }
                 id
             }
             require(ids.distinct().size == ids.size) { "皮肤编号重复，暂不写入" }
@@ -122,7 +128,7 @@ object UnlockEngine {
         .mapNotNull { roleKey.matchEntire(it) ?: skinKey.matchEntire(it) }.map { it.groupValues[1] }.distinct().sorted()
 
     /** Preserve XML byte layout except for existing, validated scalar tokens. */
-    private fun replaceXml(text: String, node: Element, replacement: String): String {
+    internal fun replaceXml(text: String, node: Element, replacement: String): String {
         val tag = node.tagName
         val name = Regex.escape(node.getAttribute("name"))
         val pattern = Regex("(?s)<$tag\\b[^>]*\\bname\\s*=\\s*[\"']$name[\"'][^>]*(?:/>|>.*?</$tag\\s*>)")
@@ -141,19 +147,53 @@ object UnlockEngine {
         return text.replaceRange(match.range, updated)
     }
 
+    /** Per-role availability; malformed progression does not disable independent role/skin edits. */
+    fun progression(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String): List<HeroProgress> {
+        val catalog = catalog(gameBytes, prefsBytes, account)
+        val nodes = prefs(prefsBytes)
+        val root = gameBytes?.let(::game)
+        return catalog.heroes.map { hero ->
+            val level = runCatching {
+                val number = (root?.get("heroLevel") as? JsonObject)?.get(hero.name) as? JsonPrimitive
+                val old = number?.takeUnless { it.isString }?.intOrNull
+                val node = nodes[prefKey(account, "c${hero.index}_level")]
+                require(old != null && old >= 0 && node?.tagName == "int" && value(node).toIntOrNull() == old) { "等级缺失、格式未知或镜像不一致" }
+                old
+            }
+            val skills = runCatching {
+                val entries = (root?.get("heroSkillUnlock") as? JsonObject)?.get(hero.name) as? JsonArray ?: error("技能结构缺失")
+                val values = linkedMapOf<Int, Boolean>()
+                entries.forEach { entry ->
+                    val skill = entry as? JsonObject ?: error("技能格式未知")
+                    val id = (skill["Key"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+                    val unlocked = (skill["Value"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+                    require(id != null && id >= 0 && id !in values && unlocked != null) { "技能编号或状态无效" }
+                    val node = nodes[prefKey(account, "c_${hero.name}_skill_${id}_unlock")]
+                    require(node?.tagName == "int" && value(node) == if (unlocked) "1" else "0") { "技能 #$id 镜像缺失或不一致" }
+                    values[id] = unlocked
+                }
+                values.toMap()
+            }
+            HeroProgress(hero.index, level.getOrNull(), level.exceptionOrNull()?.message, skills.getOrNull().orEmpty(), skills.exceptionOrNull()?.message)
+        }
+    }
+
     fun unlock(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String, selection: UnlockSelection): UnlockPatch {
         val catalog = catalog(gameBytes, prefsBytes, account)
-        require(selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.levels || selection.skills) { "请先选择要修改的内容" }
-        require(gameBytes != null || (!selection.levels && !selection.skills)) { "等级和技能需要 game.data 与 XML 双文件核对，当前为 XML 单文件模式" }
+        require(selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.hasProgress) { "请先选择要修改的内容" }
+        require(gameBytes != null || !selection.hasProgress) { "等级和技能需要 game.data 与 XML 双文件核对，当前为 XML 单文件模式" }
         val nodes = prefs(prefsBytes)
         val byIndex = catalog.heroes.associateBy { it.index }
         var text = utf8(prefsBytes)
         val root = gameBytes?.let(::game)
         val gameHeroes = root?.get("heroUnlock")?.jsonObject?.toMutableMap()
         val gameSkins = root?.get("skinLock")?.jsonObject?.toMutableMap()
-        val gameLevels = if (selection.levels) (root?.get("heroLevel") as? JsonObject)?.toMutableMap()
+        val levelTargets = if (selection.levels) byIndex.keys else selection.levelHeroes
+        val skillTargets = if (selection.skills) byIndex.keys else selection.skillIds.map { it.hero }.toSet()
+        require((levelTargets + skillTargets).all { it in byIndex }) { "不能创建未知角色的等级或技能" }
+        val gameLevels = if (levelTargets.isNotEmpty()) (root?.get("heroLevel") as? JsonObject)?.toMutableMap()
             ?: error("game.data 缺少角色等级结构，暂不写入") else null
-        val gameSkills = if (selection.skills) (root?.get("heroSkillUnlock") as? JsonObject)?.toMutableMap()
+        val gameSkills = if (skillTargets.isNotEmpty()) (root?.get("heroSkillUnlock") as? JsonObject)?.toMutableMap()
             ?: error("game.data 缺少技能结构，暂不写入") else null
         if (selection.levels || selection.skills) require(catalog.heroes.map { it.name }.toSet() == gameHeroes!!.keys) {
             "XML 角色目录与 game.data 不完整对应，暂不写入"
@@ -187,10 +227,10 @@ object UnlockEngine {
                 changes += "${hero.name} / 皮肤 #${id.skin}：$old → 1"
             }
         }
-        if (selection.levels) {
-            require(gameLevels!!.keys == gameHeroes!!.keys) { "角色等级集合与角色解锁集合不一致，暂不写入" }
-            catalog.heroes.forEach { hero ->
-                val old = gameLevels.getValue(hero.name).jsonPrimitive.intOrNull ?: error("角色等级格式未知，暂不写入")
+        if (levelTargets.isNotEmpty()) {
+            if (selection.levels) require(gameLevels!!.keys == gameHeroes!!.keys) { "角色等级集合与角色解锁集合不一致，暂不写入" }
+            catalog.heroes.filter { it.index in levelTargets }.forEach { hero ->
+                val old = (gameLevels!![hero.name] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull ?: error("${hero.name} 角色等级缺失或格式未知，暂不写入")
                 val node = nodes[prefKey(account, "c${hero.index}_level")] ?: error("XML 缺少 ${hero.name} 等级镜像，暂不写入")
                 require(node.tagName == "int" && value(node).toIntOrNull() == old && old >= 0) { "${hero.name} 等级镜像不一致，暂不写入" }
                 if (old < 7) {
@@ -200,16 +240,17 @@ object UnlockEngine {
                 }
             }
         }
-        if (selection.skills) {
-            require(gameSkills!!.keys == gameHeroes!!.keys) { "技能集合与角色解锁集合不一致，暂不写入" }
-            catalog.heroes.forEach { hero ->
-                val entries = gameSkills.getValue(hero.name) as? JsonArray ?: error("${hero.name} 技能格式未知，暂不写入")
+        if (skillTargets.isNotEmpty()) {
+            if (selection.skills) require(gameSkills!!.keys == gameHeroes!!.keys) { "技能集合与角色解锁集合不一致，暂不写入" }
+            catalog.heroes.filter { it.index in skillTargets }.forEach { hero ->
+                val entries = gameSkills!![hero.name] as? JsonArray ?: error("${hero.name} 技能缺失或格式未知，暂不写入")
                 val ids = mutableSetOf<Int>()
                 val patched = entries.map { entry ->
                     val skill = entry as? JsonObject ?: error("技能条目格式未知，暂不写入")
-                    val id = skill["Key"]?.jsonPrimitive?.intOrNull ?: error("技能编号格式未知，暂不写入")
-                    val unlocked = skill["Value"]?.jsonPrimitive?.booleanOrNull ?: error("技能状态格式未知，暂不写入")
+                    val id = (skill["Key"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull ?: error("技能编号格式未知，暂不写入")
                     require(id >= 0 && ids.add(id)) { "技能编号重复或无效，暂不写入" }
+                    if (!selection.skills && SkillId(hero.index, id) !in selection.skillIds) return@map entry
+                    val unlocked = (skill["Value"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: error("技能状态格式未知，暂不写入")
                     val node = nodes[prefKey(account, "c_${hero.name}_skill_${id}_unlock")]
                         ?: error("XML 缺少 ${hero.name} 技能 #$id 镜像，暂不写入")
                     require(node.tagName == "int" && value(node) == (if (unlocked) "1" else "0")) { "${hero.name} 技能 #$id 镜像不一致，暂不写入" }
@@ -219,20 +260,12 @@ object UnlockEngine {
                         JsonObject(skill + ("Value" to JsonPrimitive(true)))
                     }
                 }
+                require(selection.skills || selection.skillIds.filter { it.hero == hero.index }.all { it.skill in ids }) { "不能创建不存在的技能" }
                 gameSkills[hero.name] = JsonArray(patched)
             }
         }
-        // Existing local-reading flags only. Never invent account or registration keys.
-        for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
-            val name = if (account.isEmpty()) flag else "${flag}_$account"
-            val node = nodes[name] ?: continue
-            require(node.tagName == "int" && value(node) in setOf("0", "1")) { "读取开关格式未知，暂不写入" }
-            if (value(node) == "1") {
-                text = replaceXml(text, node, "0")
-                changes += "$flag：切换为本地读取（0）"
-            }
-        }
-        val encodedPrefs = text.toByteArray(Charsets.UTF_8)
+        val (encodedPrefs, flags) = localReadingFlags(text.toByteArray(Charsets.UTF_8), account)
+        changes += flags
         prefs(encodedPrefs)
         val encodedGame = root?.let {
             val fields = mutableMapOf<String, JsonElement>("heroUnlock" to JsonObject(gameHeroes!!), "skinLock" to JsonObject(gameSkins!!))
@@ -244,21 +277,38 @@ object UnlockEngine {
         val verified = catalog(encodedGame, encodedPrefs, account)
         selection.heroes.forEach { index -> require(verified.heroes.single { it.index == index }.unlocked == true) }
         selection.skins.forEach { id -> require(verified.heroes.single { it.index == id.hero }.skins[id.skin] == 1) }
-        if (selection.levels || selection.skills) {
+        if (selection.hasProgress) {
             val checkedNodes = prefs(encodedPrefs)
             val checkedRoot = game(encodedGame!!)
             catalog.heroes.forEach { hero ->
-                if (selection.levels) {
+                if (hero.index in levelTargets) {
                     val level = checkedRoot["heroLevel"]!!.jsonObject.getValue(hero.name).jsonPrimitive.int
                     require(level >= 7 && checkedNodes.getValue(prefKey(account, "c${hero.index}_level")).getAttribute("value").toInt() == level)
                 }
-                if (selection.skills) checkedRoot["heroSkillUnlock"]!!.jsonObject.getValue(hero.name).jsonArray.forEach { entry ->
+                if (hero.index in skillTargets) checkedRoot["heroSkillUnlock"]!!.jsonObject.getValue(hero.name).jsonArray.forEach { entry ->
                     val id = entry.jsonObject.getValue("Key").jsonPrimitive.int
+                    if (!selection.skills && SkillId(hero.index, id) !in selection.skillIds) return@forEach
                     require(entry.jsonObject.getValue("Value").jsonPrimitive.boolean &&
                         checkedNodes.getValue(prefKey(account, "c_${hero.name}_skill_${id}_unlock")).getAttribute("value") == "1")
                 }
             }
         }
         return UnlockPatch(encodedGame, encodedPrefs, changes)
+    }
+
+    fun localReadingFlags(bytes: ByteArray, account: String): Pair<ByteArray, List<String>> {
+        val nodes = prefs(bytes)
+        var text = utf8(bytes)
+        val changes = mutableListOf<String>()
+        for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
+            val name = if (account.isEmpty()) flag else "${flag}_$account"
+            val node = nodes[name] ?: continue
+            require(node.tagName == "int" && value(node) in setOf("0", "1")) { "读取开关格式未知，暂不写入" }
+            if (value(node) == "1") {
+                text = replaceXml(text, node, "0")
+                changes += "$flag：切换为本地读取（0）"
+            }
+        }
+        return text.toByteArray(Charsets.UTF_8) to changes
     }
 }

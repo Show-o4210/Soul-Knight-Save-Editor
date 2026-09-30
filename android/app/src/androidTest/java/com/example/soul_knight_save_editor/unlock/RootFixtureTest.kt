@@ -12,6 +12,44 @@ import java.util.UUID
 /** Opt-in: only synthetic files inside this assistant's own sandbox, never the game package. */
 @RunWith(AndroidJUnit4::class)
 class RootFixtureTest {
+    @Test fun weaponCountsWriteAndRestoreInsideOwnSandbox() {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("rootFixture") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        require(context.packageName == "com.example.soul_knight_save_editor")
+        val folder = File(context.filesDir, "weapon-fixture-${UUID.randomUUID()}").apply { check(mkdir()) }
+        val item = File(folder, "item_data_42_.data")
+        val statistic = File(folder, "statistic_42_.data")
+        val itemBytes = ItemCodec.encode(kotlinx.serialization.json.Json.parseToJsonElement("""{"AppVersion":80600}""") as kotlinx.serialization.json.JsonObject)
+        val statBytes = StatisticCodec.encode(kotlinx.serialization.json.Json.parseToJsonElement("""{"object2ObtainTime":{"weapon_361":1},"keep":true}""") as kotlinx.serialization.json.JsonObject)
+        item.writeBytes(itemBytes); statistic.writeBytes(statBytes)
+        val root = RootStorage()
+        try {
+            val allowed = setOf(item.absolutePath, statistic.absolutePath)
+            val storage = object : DeviceStorage {
+                override fun stop(packageName: String, user: Int) { require(packageName == context.packageName) }
+                override fun read(path: String): SaveFile { require(path in allowed); return root.read(path) }
+                override fun replace(file: SaveFile, bytes: ByteArray) { require(file.path in allowed); root.replace(file, bytes) }
+            }
+            val snapshot = SaveSnapshot(context.packageName, android.os.Process.myUid() / 100000, null, null,
+                listOf(root.read(item.absolutePath)), listOf(root.read(statistic.absolutePath)))
+            val repository = SaveRepository(File(folder, "journals"), storage)
+            val plan = EditEngine.preview(snapshot, "42", UnlockSelection(), ItemSelection(), true)
+            val id = repository.apply(snapshot, plan)
+            assertArrayEquals(plan.outputs.getValue(statistic.absolutePath), root.read(statistic.absolutePath).bytes)
+            assertArrayEquals(itemBytes, root.read(item.absolutePath).bytes)
+            repository.restore(id)
+            assertArrayEquals(statBytes, root.read(statistic.absolutePath).bytes)
+            val original = snapshot.statistics.single()
+            val actual = root.read(statistic.absolutePath)
+            assertEquals(original.owner, actual.owner)
+            assertEquals(original.mode, actual.mode)
+            assertEquals(original.context, actual.context)
+            assertTrue(repository.pending().isEmpty())
+        } finally {
+            root.close()
+            folder.deleteRecursively()
+        }
+    }
     @Test fun rootWriteVerifyAndRestoreInOwnSandbox() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("rootFixture") == "true")
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -41,7 +79,7 @@ class RootFixtureTest {
             repository.restore(id)
             assertArrayEquals(gameBytes, root.read(game.absolutePath).bytes)
             assertArrayEquals(prefsBytes, root.read(prefs.absolutePath).bytes)
-            assertEquals(snapshot.prefs.owner, root.read(prefs.absolutePath).owner)
+            assertEquals(snapshot.prefs!!.owner, root.read(prefs.absolutePath).owner)
             assertEquals(snapshot.prefs.mode, root.read(prefs.absolutePath).mode)
             assertEquals(snapshot.prefs.context, root.read(prefs.absolutePath).context)
             assertTrue(repository.pending().isEmpty())

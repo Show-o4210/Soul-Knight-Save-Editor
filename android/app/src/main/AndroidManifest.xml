@@ -4,6 +4,13 @@
 
     <!-- Recognized by common root managers; ignored harmlessly on stock Android. -->
     <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
+    <!-- Launcher-app labels for user-selected local save candidates; no all-packages permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
