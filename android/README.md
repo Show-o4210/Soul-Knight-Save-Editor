@@ -1,12 +1,12 @@
-# Android 本地助手（2.0.0-alpha14）
+# Android 本地助手（2.0.0）
 
-这是需要 Root 的本地存档开发预览版。打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 运行：
+这是需要 Root 的本地存档助手。当前为 2.0.0 正式发布准备。打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
 
 ```powershell
 .\gradlew.bat testDebugUnitTest assembleDebug lintDebug
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。该 APK 使用调试签名；预发布附件适合隔离测试，不保证能直接覆盖旧版安装。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签名。正式 Release 构建读取仓库外签名配置，步骤见[签名文档](../docs/android-signing.md)。2.0.0 / versionCode 16 正式包无法覆盖历史调试包；请先导出内部备份，具体见[迁移说明](../docs/releases/2.0.0.md)。
 
 ## 当前编辑范围
 
@@ -33,7 +33,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`。该 APK 使用调
 
 alpha12 核心实现与共用 API 见[实现档案](../docs/core-api-alpha12.md)。快速与专家分别保留草稿；切换 Tab 不丢草稿，切换账号／游戏／重新扫描会清空。只有当前模式草稿参与预览；预览先显示角色／物品／武器摘要，再展开逐项变化。增量按扫描原值相加，目标值明确覆盖；留空或增量 0 不改，目标值 0 清零。
 
-alpha13 的 115 项 JVM 测试全部通过，私有配对样本只读离线验证、Debug 构建与 lint 通过，APK 安装与版本核对通过。界面与游戏效果留待用户候选验收；本轮没有直接写真实游戏存档，也未进行完整设备界面回归。当前包仍为测试候选，不定义为最终版本；正式签名和发布准备后续处理。历史用户反馈与尚未验收范围见[开发状态](../docs/development-status.md)。
+2.0.0 的公开核心回归为 114 项通过、4 项未注入私有样本而跳过，Release 构建、lint 与签名验证通过。发布准备未卸载虚拟机上的旧调试助手，也未直接写真实游戏存档。此版作为正式发布里程碑，后续继续扩展；公开发布尚未执行。历史用户反馈、实际验证与尚未验收范围见[开发状态](../docs/development-status.md)和[发布准备记录](../docs/release-2.0.0.md)。
 
 私有样本可用 `-PitemBaseline=<物品文件>`、`-PstatisticBaseline=<同账号统计文件>` 和 `-PunlockBaseline=<角色备份 original 目录>` 注入；不指定时对应私有回归按设计跳过。样本不应放进公开源码或 APK 资源。
 

@@ -11,6 +11,10 @@
 *.aab
 *.jks
 *.keystore
+*.p12
+*.pfx
+**/signing.properties
+**/signing-*.properties
 
 # Python local state and packages
 **/__pycache__/
