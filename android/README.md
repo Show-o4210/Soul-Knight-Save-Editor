@@ -1,6 +1,8 @@
 # Android 本地助手（2.0.0）
 
-这是需要 Root 的本地存档助手。当前为 2.0.0 正式发布准备。打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
+这是需要 Root 的本地存档助手。**2.0.0 已正式发布，最近测试时间为 2026 年 10 月 1 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1)；GitHub 发布标签为 `v1`，APK 内版本为 `2.0.0` / versionCode 16。这个测试日期不代表所有后续游戏版本或渠道均已验证。
+
+打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
 
 ```powershell
 .\gradlew.bat testDebugUnitTest assembleDebug lintDebug
@@ -33,7 +35,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签�
 
 alpha12 核心实现与共用 API 见[实现档案](../docs/core-api-alpha12.md)。快速与专家分别保留草稿；切换 Tab 不丢草稿，切换账号／游戏／重新扫描会清空。只有当前模式草稿参与预览；预览先显示角色／物品／武器摘要，再展开逐项变化。增量按扫描原值相加，目标值明确覆盖；留空或增量 0 不改，目标值 0 清零。
 
-2.0.0 的公开核心回归为 114 项通过、4 项未注入私有样本而跳过，Release 构建、lint 与签名验证通过。发布准备未卸载虚拟机上的旧调试助手，也未直接写真实游戏存档。此版作为正式发布里程碑，后续继续扩展；公开发布尚未执行。历史用户反馈、实际验证与尚未验收范围见[开发状态](../docs/development-status.md)和[发布准备记录](../docs/release-2.0.0.md)。
+2.0.0 发布前的公开核心回归为 114 项通过、4 项未注入私有样本而跳过，Release 构建、lint 与签名验证通过。发布准备时未卸载虚拟机上的旧调试助手，也未直接写真实游戏存档。此版已在 `v1` 正式发布，后续继续扩展；历史用户反馈、实际验证与尚未验收范围见[开发状态](../docs/development-status.md)和[发布准备记录](../docs/release-2.0.0.md)。历史档案的准备状态描述保留为当时记录，当前公开版本以发布页为准。
 
 私有样本可用 `-PitemBaseline=<物品文件>`、`-PstatisticBaseline=<同账号统计文件>` 和 `-PunlockBaseline=<角色备份 original 目录>` 注入；不指定时对应私有回归按设计跳过。样本不应放进公开源码或 APK 资源。
 
