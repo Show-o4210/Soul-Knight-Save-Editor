@@ -1,6 +1,6 @@
 # vivo 渠道适配：2.0.1-rc01
 
-日期：2026-10-04。状态：**用户已实测 vivo 角色和皮肤解锁成功，已以 [v2.0.1-rc01 预发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开；其余 vivo 功能仍待游戏内验收。** GitHub `v1` 的 `2.0.0` 附件保留，不包含此修复。
+日期：2026-10-04。状态：**用户已实测 vivo 角色和皮肤解锁成功，[v2.0.1-rc01](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01) 已从预发布转为最新正式发布；其余 vivo 功能仍待游戏内验收。** 转正保留已实测 APK、标签和版本字符串，不重新打包；GitHub `v1` 的 `2.0.0` 附件保留，不包含此修复。
 
 ## 原因与样本范围
 

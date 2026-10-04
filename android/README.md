@@ -1,8 +1,8 @@
 # Android 本地助手
 
-这是需要 Root 的本地存档助手。**2.0.0 已正式发布，最近测试时间为 2026 年 10 月 4 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1)；GitHub 发布标签为 `v1`，APK 内版本为 `2.0.0` / versionCode 16。本次新增实测为 vivo 角色和皮肤解锁，不代表所有后续游戏版本或渠道均已验证。
+这是需要 Root 的本地存档助手。**最新正式发布为 2.0.1-rc01，最近测试时间为 2026 年 10 月 4 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)；GitHub 发布标签为 `v2.0.1-rc01`，APK 内版本为 `2.0.1-rc01` / versionCode 17。本次新增实测为 vivo 角色和皮肤解锁，不代表所有后续游戏版本或渠道均已验证。
 
-当前源码为 **`2.0.1-rc01` / versionCode 17**，已在 [v2.0.1-rc01 预发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开：加入 vivo 8.6.0 已确认的 16 位小写十六进制账号，统一 XML、物品与统计分片识别；原有数字账号继续保留。2026-10-04 核心回归及 vivo 私有样本离线验证通过，用户实测角色、皮肤解锁成功；其余 vivo 功能仍待游戏内验证。候选包沿用正式签名，可覆盖更新正式 `2.0.0`。`v1` 附件不包含此修复。规则、边界与验收步骤见 [vivo 适配档案](../docs/vivo-channel-2.0.1-rc01.md)。
+当前源码为 **`2.0.1-rc01` / versionCode 17**，已在 [v2.0.1-rc01 正式发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开：加入 vivo 8.6.0 已确认的 16 位小写十六进制账号，统一 XML、物品与统计分片识别；原有数字账号继续保留。2026-10-04 核心回归及 vivo 私有样本离线验证通过，用户实测角色、皮肤解锁成功；其余 vivo 功能仍待游戏内验证。由预发布转正时保留已测试 APK，版本字符串仍为 `2.0.1-rc01`；沿用正式签名，可覆盖更新正式 `2.0.0`。`v1` 附件不包含此修复。规则、边界与验收步骤见 [vivo 适配档案](../docs/vivo-channel-2.0.1-rc01.md)。
 
 打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
 

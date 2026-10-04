@@ -2,21 +2,21 @@
 
 Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑自己设备上的本地存档。两个客户端的功能范围和验证进度不同，Android 的新增功能不表示 Python 已同步更新。
 
-**最近测试时间：2026 年 10 月 4 日。Android 正式版与 vivo 修复预发布版均已发布，当前适配与验证基准为元气骑士 8.6.0。** 本次新增实测范围为 vivo 渠道的角色和皮肤解锁；游戏更新可能改变存档格式，这个日期不代表所有后续版本、渠道和条目都已验证。
+**最近测试时间：2026 年 10 月 4 日。vivo 修复版本已转为 Android 最新正式发布，当前适配与验证基准为元气骑士 8.6.0。** 本次新增实测范围为 vivo 渠道的角色和皮肤解锁；游戏更新可能改变存档格式，这个日期不代表所有后续版本、渠道和条目都已验证。
 
 ## 下载与版本
 
-**[下载 Android 正式版 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v1/SoulKnightSaveEditor-2.0.0.apk)** · [查看发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1)
+**[下载 Android 最新正式版 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.1-rc01/SoulKnightSaveEditor-2.0.1-rc01.apk)** · [查看发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)
 
-本次 Android 正式发布的 GitHub 标签为 **`v1`**，APK 内版本为 **`2.0.0` / versionCode 16**。`v1` 表示首个 Android 正式发布里程碑，后续仍会继续完善功能和体验。本次附件为 Android APK。
+当前 Android 正式发布标签为 **`v2.0.1-rc01`**，APK 内版本为 **`2.0.1-rc01` / versionCode 17**。2026-10-04 按用户要求由预发布转正，保留已实测 APK、标签和文件名，因此版本字符串仍带 `rc01`；Release 类别已为正式版。后续继续完善功能和体验。
 
-**[下载 vivo 修复预发布 APK（2.0.1-rc01）](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.1-rc01/SoulKnightSaveEditor-2.0.1-rc01.apk)** · [预发布说明](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)
+[上一正式版 2.0.0（v1）](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1) 保留为历史版本；`v1` 表示首个 Android 正式发布里程碑。
 
 `2.0.1-rc01` / versionCode 17 修复 vivo 渠道服 8.6.0 的十六进制账号识别问题，用户已实测角色和皮肤解锁成功；其余功能在本次 vivo 样本上的验证仍限于离线检查。该包沿用正式签名，可覆盖更新 `2.0.0`。以上 `v1` 正式版附件不包含此修复；其他渠道继续等待社区反馈，详见 [vivo 适配档案](docs/vivo-channel-2.0.1-rc01.md)。
 
 | 客户端 | 目录 | 当前状态 |
 | --- | --- | --- |
-| Android 本地助手 | [`android/`](android/) | 正式版 `2.0.0`；vivo 修复预发布 `2.0.1-rc01`；Android 7.0 及以上，需要 Root，仅处理本机文件 |
+| Android 本地助手 | [`android/`](android/) | 最新正式版 `2.0.1-rc01`；Android 7.0 及以上，需要 Root，仅处理本机文件 |
 | Python 桌面工具 | [`desktop/`](desktop/) | 1.x 系列；将用户准备的存档放入输入目录，结果输出到另一目录 |
 
 ## 开始使用 Android 版
@@ -59,6 +59,6 @@ Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑�
 
 ## 版本说明
 
-`v1.0.1` 是旧桌面客户端版本；`v2.0.0-alpha05` 是此前的 Android 开发预览。当前 Android 正式版为 `2.0.0`，发布标签为 `v1`；vivo 修复预发布为 `2.0.1-rc01`，标签为 `v2.0.1-rc01`。此前 alpha 包使用调试签名，alpha10 两武器试验版因选错计数字段而撤回。正式版是发布里程碑，不是项目最终交付，也不表示覆盖全部游戏版本。安装前请保留原始存档和助手内部所需备份。
+`v1.0.1` 是旧桌面客户端版本；`v2.0.0-alpha05` 是此前的 Android 开发预览。`v1` 为首个 Android 正式版 `2.0.0`；最新正式版为已转正的 `2.0.1-rc01`，标签为 `v2.0.1-rc01`。此前 alpha 包使用调试签名，alpha10 两武器试验版因选错计数字段而撤回。正式版是发布里程碑，不是项目最终交付，也不表示覆盖全部游戏版本。安装前请保留原始存档和助手内部所需备份。
 
 本项目与凉屋游戏无关。请仅操作自己有权处理的本地文件。游戏更新可能改变存档格式；存档损坏、进度冲突及账号影响均需使用者自行评估。
