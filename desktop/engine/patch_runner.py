@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable
 
-from core.constants import DEVICE_FILES_DIR, PREFS_NAME, format_missing_file
+from core.constants import DEVICE_FILES_DIR, IOS_DEVICE_FILES_DIR, PREFS_NAME, IOS_PREFS_NAME, Platform, format_missing_file
 from core.crypto import encrypt_setting_data
 from core.deploy import checklist_lines
 from core.diff import dict_key_diff, list_append_preview, summarize_changes
@@ -35,6 +35,7 @@ class PatchRunner:
         audit = audit_input(
             self.input_dir,
             snap.uid,
+            platform=snap.platform,
             needs_item=plan.touches_item(),
         )
         issues: list[str] = []
@@ -59,7 +60,7 @@ class PatchRunner:
             issues.append(
                 format_missing_file(
                     item_name,
-                    reason=f"改物品需要该分片，或改用 {DEVICE_FILES_DIR}/game.data 镜像",
+                    reason=f"改物品需要该分片，或改用 {DEVICE_FILES_DIR if snap.platform == Platform.Android else IOS_DEVICE_FILES_DIR}/game.data 镜像",
                 )
             )
         if audit.missing_for_plan:
@@ -131,6 +132,7 @@ class PatchRunner:
         ws.load()
         ws = ws.clone_for_patch()
         uid = ws.uid or "?"
+        platform = ws.platform
         manifest = self._build_manifest(ws, plan)
 
         before_item = {
@@ -181,7 +183,7 @@ class PatchRunner:
             {k: str(v) for k, v in after_summary.items()},
         ))
 
-        output_files = manifest.filenames(str(uid))
+        output_files = manifest.filenames(str(uid), platform)
         return {
             "uid": uid,
             "issues": issues,
@@ -189,7 +191,7 @@ class PatchRunner:
             "describe": plan.describe(),
             "detail_lines": detail,
             "output_files": output_files,
-            "deploy_checklist": checklist_lines(output_files=output_files),
+            "deploy_checklist": checklist_lines(output_files=output_files, platform=platform),
             "before_summary": before_summary,
             "after_summary": after_summary,
         }
@@ -221,6 +223,7 @@ class PatchRunner:
         ws.load()
         ws = ws.clone_for_patch()
         uid = ws.uid
+        platform = ws.platform
         assert uid
 
         manifest = self._build_manifest(ws, plan)
@@ -239,11 +242,11 @@ class PatchRunner:
             "uid": uid,
             "stats": {},
             "deploy": [],
-            "output_files": manifest.filenames(uid),
+            "output_files": manifest.filenames(uid, platform),
             "before": before_game,
-            "deploy_checklist": checklist_lines(output_files=manifest.filenames(uid)),
+            "deploy_checklist": checklist_lines(output_files=manifest.filenames(uid, platform), platform=platform),
         }
-        say(f"将输出 {len(manifest.filenames(uid))} 个文件: {', '.join(manifest.filenames(uid))}")
+        say(f"将输出 {len(manifest.filenames(uid, platform))} 个文件: {', '.join(manifest.filenames(uid, platform))}")
 
         stats, _ = self._execute_plan(ws, plan, log=say)
         report["stats"] = stats
@@ -261,36 +264,42 @@ class PatchRunner:
 
         if manifest.prefs:
             prefs_out = self.output_dir / PREFS_NAME
-            ws.prefs.save(prefs_out)
-            report["deploy"].append(f"shared_prefs/{prefs_out.name}")
-            say(f"→ {prefs_out.name}")
+            ios_prefs_out = self.output_dir / IOS_PREFS_NAME
+            if ws.prefs.platform == Platform.Android:
+                ws.prefs.save(prefs_out)
+                report["deploy"].append(f"shared_prefs/{prefs_out.name}")
+                say(f"→ {prefs_out.name}")
+            else:
+                ws.prefs.save(ios_prefs_out)
+                report["deploy"].append(f"Preferences/{ios_prefs_out.name}")
+                say(f"→ {ios_prefs_out.name}")
 
         if manifest.item:
             item_out = self.output_dir / shard_filename("item_data", uid)
             ws.item.save(item_out)
             ws.item.save_json(self.output_dir / f"item_data_{uid}_.json")
-            report["deploy"].append(f"files/{item_out.name}")
+            report["deploy"].append(f"{'files' if ws.prefs.platform == Platform.Android else 'Documents'}/{item_out.name}")
             say(f"→ {item_out.name}")
 
         if manifest.setting and ws.setting_data is not None:
             setting_out = self.output_dir / shard_filename("setting", uid)
             enc = encrypt_setting_data(ws.setting_data, ws.setting_path)
             setting_out.write_text(enc, encoding="utf-8")
-            report["deploy"].append(f"files/{setting_out.name}")
+            report["deploy"].append(f"{'files' if ws.prefs.platform == Platform.Android else 'Documents'}/{setting_out.name}")
             say(f"→ {setting_out.name}")
 
         if manifest.shards.get("weapon_evolution_data"):
             we_out = self.output_dir / shard_filename("weapon_evolution_data", uid)
             ws.weapon_evolution.save(we_out)
             ws.weapon_evolution.save_json(self.output_dir / f"weapon_evolution_data_{uid}_.json")
-            report["deploy"].append(f"files/{we_out.name}")
+            report["deploy"].append(f"{'files' if ws.prefs.platform == Platform.Android else 'Documents'}/{we_out.name}")
             say(f"→ {we_out.name}")
 
         if manifest.shards.get("statistic"):
             stat_out = self.output_dir / shard_filename("statistic", uid)
             ws.statistic.save(stat_out)
             ws.statistic.save_json(self.output_dir / f"statistic_{uid}_.json")
-            report["deploy"].append(f"files/{stat_out.name}")
+            report["deploy"].append(f"{'files' if ws.prefs.platform == Platform.Android else 'Documents'}/{stat_out.name}")
             say(f"→ {stat_out.name}")
 
         after_game = {
@@ -344,7 +353,7 @@ class PatchRunner:
         if plan.cleanup_stale_uid:
             n = ws.prefs.cleanup_stale_uid(uid)
             stats["cleanup"] = n
-            say(f"XML 清理他号键: −{n}")
+            say(f"XML / PList 清理他号键: −{n}")
 
         if plan.all_characters:
             ws.game.patch_characters(default_level=plan.default_level)
