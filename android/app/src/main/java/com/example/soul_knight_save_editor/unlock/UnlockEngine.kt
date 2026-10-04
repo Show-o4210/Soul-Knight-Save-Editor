@@ -26,8 +26,8 @@ data class UnlockPatch(val game: ByteArray?, val prefs: ByteArray, val changes: 
 object UnlockEngine {
     private val json = Json { isLenient = false }
     private val key = byteArrayOf(115,108,99,122,125,103,117,99,127,87,109,108,107,74,95)
-    private val roleKey = Regex("^(?:(\\d+)_)?c(\\d+)_unlock$")
-    private val skinKey = Regex("^(?:(\\d+)_)?c(\\d+)_skin(\\d+)$")
+    private val roleKey = SaveAccountId.roleUnlock
+    private val skinKey = SaveAccountId.skinUnlock
     const val MAX_BYTES = 4 * 1024 * 1024
 
     fun sha(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

@@ -1,6 +1,8 @@
-# Android 本地助手（2.0.0）
+# Android 本地助手
 
-这是需要 Root 的本地存档助手。**2.0.0 已正式发布，最近测试时间为 2026 年 10 月 1 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1)；GitHub 发布标签为 `v1`，APK 内版本为 `2.0.0` / versionCode 16。这个测试日期不代表所有后续游戏版本或渠道均已验证。
+这是需要 Root 的本地存档助手。**2.0.0 已正式发布，最近测试时间为 2026 年 10 月 4 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1)；GitHub 发布标签为 `v1`，APK 内版本为 `2.0.0` / versionCode 16。本次新增实测为 vivo 角色和皮肤解锁，不代表所有后续游戏版本或渠道均已验证。
+
+当前源码为 **`2.0.1-rc01` / versionCode 17**，已在 [v2.0.1-rc01 预发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开：加入 vivo 8.6.0 已确认的 16 位小写十六进制账号，统一 XML、物品与统计分片识别；原有数字账号继续保留。2026-10-04 核心回归及 vivo 私有样本离线验证通过，用户实测角色、皮肤解锁成功；其余 vivo 功能仍待游戏内验证。候选包沿用正式签名，可覆盖更新正式 `2.0.0`。`v1` 附件不包含此修复。规则、边界与验收步骤见 [vivo 适配档案](../docs/vivo-channel-2.0.1-rc01.md)。
 
 打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
 
@@ -38,6 +40,8 @@ alpha12 核心实现与共用 API 见[实现档案](../docs/core-api-alpha12.md)
 2.0.0 发布前的公开核心回归为 114 项通过、4 项未注入私有样本而跳过，Release 构建、lint 与签名验证通过。发布准备时未卸载虚拟机上的旧调试助手，也未直接写真实游戏存档。此版已在 `v1` 正式发布，后续继续扩展；历史用户反馈、实际验证与尚未验收范围见[开发状态](../docs/development-status.md)和[发布准备记录](../docs/release-2.0.0.md)。历史档案的准备状态描述保留为当时记录，当前公开版本以发布页为准。
 
 私有样本可用 `-PitemBaseline=<物品文件>`、`-PstatisticBaseline=<同账号统计文件>` 和 `-PunlockBaseline=<角色备份 original 目录>` 注入；不指定时对应私有回归按设计跳过。样本不应放进公开源码或 APK 资源。
+
+vivo 组合回归可使用 `-PvivoBaseline=<私有样本目录>` 注入同账号 `game.data`、PlayerPrefs XML 和物品／统计分片。测试只在内存中计算修改并核对原文件未变，不写设备存档；未提供时该项按设计跳过。
 
 体验与刷新 API 见[alpha13 说明](../docs/experience-alpha13.md)：卡片问号提供说明，包名折叠后编辑，底部支持点击／滑动切换。最新 [alpha14 说明](../docs/header-easter-egg-alpha14.md)修正标题为手指上滑收缩、下滑展开，并加入标题连点 7 次触发的 SHOWCHEER 彩蛋。本轮 3 项彩蛋定向测试、Debug 构建、lint 与设备版本核对通过；完整核心回归未重跑，实际动画留待用户二测。
 

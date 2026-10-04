@@ -9,8 +9,8 @@ class DiscoveryCancelled : RuntimeException("已取消搜索")
 /** Discovery recognizes a source; editing still validates the full snapshot independently. */
 object SaveDiscovery {
     private val packagePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
-    private val role = Regex("^(?:(\\d+)_)?c\\d+_unlock$")
-    private val skin = Regex("^(?:(\\d+)_)?c\\d+_skin\\d+$")
+    private val role = SaveAccountId.roleUnlock
+    private val skin = SaveAccountId.skinUnlock
     const val MAX_PACKAGES = 512
     const val MAX_PROBES = 12
     fun packages(output: String, preferred: String, ownPackage: String): List<String> = output.lineSequence()

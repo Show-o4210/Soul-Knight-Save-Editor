@@ -3,8 +3,8 @@ package com.example.soul_knight_save_editor.unlock
 /** Register supported sources once; discovery, scanning and account binding share these names. */
 enum class SaveSource(val directory: String, val depth: Int, val glob: String, val filename: Regex) {
     GAME("files", 2, "game.data", Regex("^game\\.data$")),
-    ITEM("files", 2, "item_data*.data", Regex("^item_data(?:_(\\d+)_)?\\.data$")),
-    STATISTIC("files", 2, "statistic*.data", Regex("^statistic(?:_(\\d+)_)?\\.data$")),
+    ITEM("files", 2, "item_data*.data", Regex("^item_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data$")),
+    STATISTIC("files", 2, "statistic*.data", Regex("^statistic(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data$")),
     PREFS("shared_prefs", 1, "*.xml", Regex("^[a-zA-Z0-9_.-]+\\.xml$"))
 }
 

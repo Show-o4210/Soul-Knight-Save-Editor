@@ -35,8 +35,8 @@ android {
         applicationId = "com.example.soul_knight_save_editor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.0.0"
+        versionCode = 17
+        versionName = "2.0.1-rc01"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -76,6 +76,7 @@ android {
         it.systemProperty("unlock.baseline", providers.gradleProperty("unlockBaseline").orNull ?: "")
         it.systemProperty("item.baseline", providers.gradleProperty("itemBaseline").orNull ?: "")
         it.systemProperty("statistic.baseline", providers.gradleProperty("statisticBaseline").orNull ?: "")
+        it.systemProperty("vivo.baseline", providers.gradleProperty("vivoBaseline").orNull ?: "")
     }
 }
 
