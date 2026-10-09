@@ -423,7 +423,7 @@ private val workspaceSections = listOf(
         } }
         item { Panel {
             Text("共同的边界", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("两种模式使用相同的备份和写回校验。快捷模式提供角色、宠物、等级、技能及已确认物品操作；详细模式仍只处理角色与皮肤。不操作 .data.new 及游玩记录。")
+            Text("两种模式使用相同的备份和写回校验。快速模式按类别准备角色、宠物、物品与武器修改；专家模式支持逐项选择和数量参数。不操作 .data.new 及游玩记录。")
             if (!state.personalUseAccepted) OutlinedButton(model::requestConsent) { Text("确认个人使用约定") }
             Text("本地运行，无联网权限", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }

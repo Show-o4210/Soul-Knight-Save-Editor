@@ -1,5 +1,7 @@
 # 快速模式武器获取次数（alpha11）
 
+> 历史开发档案：以下状态、界面与测试对应标题所示版本。当前用户功能见[帮助中心](help/README.md)，当前发布与未验收范围见[开发状态](development-status.md)。
+
 ## 实测依据
 
 用户在 8.6.0 游戏内确认：“宁神” `weapon_361` 原为 1/6；给顶层 `object2ObtainTime` 加 8 后变为可锻造。原本该字段无键的红色 `weapon_359` 同时从按 0 计补入 8，用户也确认可锻造。旧工具使用的 `StatisticsData.WeaponGameStatisticData._weaponUsedTimes` 不作为获取次数来源。完整过程见[调查记录](weapon-forge-investigation-8.6.0.md)。
