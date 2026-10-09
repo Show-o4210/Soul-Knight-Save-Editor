@@ -39,6 +39,9 @@ data class ApplyOutcome(
 )
 data class AssistantState(
     val packageName: String = "com.ChillyRoom.DungeonShooter",
+    val accessBackend: AccessBackend = AccessBackend.NATIVE_ROOT,
+    val accessStatus: String = "${accessBackend.label}：尚未检查权限身份及目标目录。",
+    val accessDiagnostic: String = "",
     val mode: AssistantMode? = null,
     val page: AssistantPage = AssistantPage.WORKSPACE,
     val workspaceTab: String = WorkspaceTabs.saves.id,
@@ -88,13 +91,43 @@ fun AssistantState.navigate(target: AssistantPage): AssistantState = copy(
     previewMode = null
 )
 
+fun AssistantState.selectAccessBackend(backend: AccessBackend): AssistantState {
+    require(!busy) { "操作进行中，请等待完成再切换存档访问方式" }
+    require(pending.isEmpty()) { "请先使用原访问方式恢复未完成事务" }
+    if (backend == accessBackend) return this
+    return clearLoaded("已切换为${backend.label}，请重新读取存档。", clearTarget = true).copy(
+        accessBackend = backend, accessStatus = "${backend.label}：尚未检查权限身份及目标目录。",
+        accessDiagnostic = "", candidates = emptyList(), discoveryProgress = DiscoveryProgress(), applyOutcome = null)
+}
+
 class AssistantModel(application: Application) : AndroidViewModel(application) {
     private val settings = application.getSharedPreferences("assistant-ui", 0)
-    private val device = RootStorage()
-    private val repository = SaveRepository(File(application.filesDir, "unlock-backups-v1"), device)
+    private val journalDirectory = File(application.filesDir, "unlock-backups-v1")
+    private var device: SaveAccess = createAccess(AccessBackend.entries.firstOrNull {
+        it.id == settings.getString("saveAccessBackend", null)
+    } ?: AccessBackend.NATIVE_ROOT)
+    private var repository = SaveRepository(journalDirectory, device)
+    private fun createAccess(backend: AccessBackend): SaveAccess = when (backend) {
+        AccessBackend.NATIVE_ROOT -> GuardedNativeSaveAccess(RootStorage(), NativeWriteGuard(
+            { android.provider.Settings.Global.getInt(getApplication<Application>().contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1) },
+            { settings.getInt("nativeWriteBoot", -1) },
+            { boot ->
+                val edit = settings.edit()
+                if (boot == null) edit.remove("nativeWriteBoot") else edit.putInt("nativeWriteBoot", boot)
+                check(edit.commit()) { "无法保存原生 Root 写任务状态，已停止写入" }
+            }))
+        AccessBackend.SHIZUKU_ROOT -> ShizukuSaveAccess(getApplication()) {
+            viewModelScope.launch {
+                val shizuku = device as? ShizukuSaveAccess ?: return@launch
+                if (!shizuku.connected) state = state.clearLoaded("Shizuku 访问上下文已变化，请检查状态并重新读取。", clearTarget = true)
+                state = state.copy(accessStatus = shizuku.statusString, preview = null, previewMode = null)
+            }
+        }
+    }
     private val archiveDirectory = File(application.filesDir, "export-backups-v1")
     private val searchCancelled = AtomicBoolean(false)
     var state by mutableStateOf(AssistantState(
+        accessBackend = device.backend,
         packageName = settings.getString("package", "com.ChillyRoom.DungeonShooter")!!,
         mode = settings.getString("mode", null)?.let { runCatching { AssistantMode.valueOf(it) }.getOrNull() },
         rememberMode = settings.getBoolean("rememberMode", true),
@@ -109,19 +142,73 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
 
     private fun work(onFailure: ((Exception) -> Unit)? = null, block: suspend () -> Unit) {
         if (state.busy) return
+        val operationDevice = device
+        val operationRepository = repository
+        var failureDiagnostic: String? = null
         state = state.copy(busy = true, preview = null, previewMode = null)
         viewModelScope.launch {
             try { block() } catch (error: Exception) {
+                failureDiagnostic = generateSequence<Throwable>(error) { it.cause }
+                    .filterIsInstance<AccessFailure>().firstOrNull { it.diagnostic != null }?.diagnostic?.let {
+                        it.copy(packageName = it.packageName ?: state.packageName,
+                            user = it.user ?: android.os.Process.myUid() / 100000).render()
+                    }
                 state = state.copy(message = error.message ?: "操作未完成，已保存的备份仍保留", preview = null, previewMode = null)
+                if (operationDevice.backend == AccessBackend.NATIVE_ROOT && generateSequence<Throwable>(error) { it.cause }
+                        .any { it is AccessFailure && it.kind == AccessFailureKind.ROOT_IDENTITY }) {
+                    state = state.copy(accessStatus = "原生 Root：本次权限身份检查失败，请检查授权后重试。")
+                }
                 onFailure?.invoke(error)
             } finally {
-                withContext(Dispatchers.IO) { device.close() }
+                val diagnostic = failureDiagnostic ?: operationDevice.latestDiagnostic?.render().orEmpty()
+                val accessStatus = if (operationDevice is ShizukuSaveAccess) {
+                    operationDevice.statusString + if (state.snapshot != null && operationDevice.connected) "；当前目标目录及存档读取通过。" else "；目标目录尚未通过本次读取验证。"
+                } else state.accessStatus
+                withContext(Dispatchers.IO) { operationDevice.close() }
                 val archives = withContext(Dispatchers.IO) { BackupArchive.list(archiveDirectory) }
-                state = state.copy(busy = false, discovering = false, pending = repository.pending(),
-                    pendingPackages = repository.pending().associateWith(repository::packageName),
-                    backups = repository.completed(state.packageName), originalBackups = repository.exportable(state.packageName), archives = archives)
+                state = state.copy(busy = false, discovering = false, pending = operationRepository.pending(),
+                    accessStatus = accessStatus, accessDiagnostic = diagnostic.ifEmpty { state.accessDiagnostic },
+                    pendingPackages = operationRepository.pending().associateWith(operationRepository::packageName),
+                    backups = operationRepository.completed(state.packageName), originalBackups = operationRepository.exportable(state.packageName), archives = archives)
             }
         }
+    }
+    fun accessBackend(backend: AccessBackend) {
+        if (state.busy || state.pending.isNotEmpty()) {
+            notice(if (state.busy) "操作进行中，请等待完成再切换存档访问方式" else "请先使用原访问方式恢复未完成事务")
+            return
+        }
+        if (backend == device.backend) return
+        val old = device
+        state = state.selectAccessBackend(backend).copy(busy = true)
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { if (old is ShizukuSaveAccess) old.dispose() else old.close() }
+                device = createAccess(backend)
+                repository = SaveRepository(journalDirectory, device)
+                settings.edit().putString("saveAccessBackend", backend.id).apply()
+            } catch (error: Exception) {
+                device = old
+                state = state.copy(accessBackend = old.backend, message = error.message ?: "访问方式切换失败，请重试")
+            } finally { state = state.copy(busy = false) }
+        }
+    }
+    fun checkAccess(requestPermission: Boolean = false) = work(onFailure = { error ->
+        if (device.backend == AccessBackend.NATIVE_ROOT) state = state.copy(
+            accessStatus = "原生 Root：检查未完成；${error.message ?: "请检查通道状态后重试"}")
+    }) {
+        val selected = device
+        val status = withContext(Dispatchers.IO) {
+            if (selected is ShizukuSaveAccess) {
+                if (requestPermission) selected.requestPermission()
+                if (!requestPermission) selected.ensureReady()
+                selected.checkStatus()
+            } else {
+                selected.ensureReady()
+                "原生 Root：执行身份 UID 0 已确认；目标目录尚未检查。"
+            }
+        }
+        state = state.copy(accessStatus = status, message = status)
     }
     fun hasDiscoveredCheer() = settings.getBoolean("showcheerDiscoveredV1", false)
     fun markCheerDiscovered() { settings.edit().putBoolean("showcheerDiscoveredV1", true).apply() }
@@ -193,6 +280,12 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun cancelDiscovery() { if (state.discovering) searchCancelled.set(true) }
     override fun onCleared() {
         searchCancelled.set(true)
+        val selected = device
+        // Closing a shell or IPC connection may block; the lifecycle callback stays on main.
+        java.util.concurrent.Executors.newSingleThreadExecutor().let { executor ->
+            executor.submit { if (selected is ShizukuSaveAccess) selected.dispose() else selected.close() }
+            executor.shutdown()
+        }
         super.onCleared()
     }
     fun scan() = work {
@@ -200,7 +293,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         state = state.clearLoaded("正在读取存档…", clearTarget = true)
         val snapshot = withContext(Dispatchers.IO) { device.scan(state.packageName.trim(), android.os.Process.myUid() / 100000) }
         val accounts = withContext(Dispatchers.Default) { EditEngine.accounts(snapshot) }
-        state = state.copy(snapshot = snapshot, accounts = accounts)
+        state = state.copy(snapshot = snapshot, accounts = accounts,
+            accessStatus = "${device.backend.label}：执行身份 UID 0 已确认，当前目标目录及存档读取通过。")
         if (accounts.size == 1) loadAccount(accounts.single()) else state = state.copy(message = "请选择要修改的账号。")
     }
     fun refresh() = work {

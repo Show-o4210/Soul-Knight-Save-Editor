@@ -377,12 +377,44 @@ private val workspaceSections = listOf(
 
 @Composable private fun Settings(model: AssistantModel, modifier: Modifier) {
     val state = model.state
+    val context = LocalContext.current
+    var showDiagnostic by remember { mutableStateOf(false) }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Panel {
             Text("公共设置", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("当前游戏：${state.packageName}", style = MaterialTheme.typography.bodySmall)
             OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("选择游戏与扫描存档") }
             Button({ model.page(AssistantPage.BACKUPS) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("settings-backups")) { Text("备份与恢复${if (state.pending.isNotEmpty()) " · 有待恢复事务" else ""}") }
+        } }
+        item { Panel("存档访问方式") {
+            AccessBackend.entries.forEach { backend ->
+                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = state.accessBackend == backend,
+                        onClick = { model.accessBackend(backend) }, enabled = !state.busy && state.pending.isEmpty(),
+                        modifier = Modifier.testTag("access-${backend.id}"))
+                    Text(if (backend == AccessBackend.NATIVE_ROOT) "原生 Root（默认）" else "Shizuku Root（备选）")
+                }
+            }
+            Text("Shizuku Root 需要另外安装 Shizuku，并通过 Root 启动。", style = MaterialTheme.typography.bodySmall)
+            Text(state.accessStatus, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("access-status"))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ model.checkAccess() }, enabled = !state.busy) { Text("检查／重试") }
+                if (state.accessBackend == AccessBackend.SHIZUKU_ROOT) {
+                    OutlinedButton({ model.checkAccess(requestPermission = true) }, enabled = !state.busy) { Text("授权 Shizuku") }
+                }
+            }
+            if (state.pending.isNotEmpty()) Text("有未完成事务，请先使用原访问方式恢复。", style = MaterialTheme.typography.bodySmall)
+            if (state.accessDiagnostic.isNotEmpty()) {
+                TextButton({ showDiagnostic = !showDiagnostic }) { Text(if (showDiagnostic) "收起本地诊断" else "查看本地诊断") }
+                if (showDiagnostic) {
+                    Text(state.accessDiagnostic, style = MaterialTheme.typography.bodySmall)
+                    TextButton({
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("存档访问诊断", state.accessDiagnostic))
+                        model.notice("本地诊断已复制。")
+                    }) { Text("复制诊断") }
+                }
+            }
         } }
         item { Panel {
             Text("启动与模式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

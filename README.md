@@ -1,22 +1,24 @@
 # 元气骑士本地存档工具
 
+**📖 本地存档读取说明：** [`.data`、`.data.new` 与读取开关，以及如何从云端同步最新 `.data`](local-data-reading.md)
+
 Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑自己设备上的本地存档。两个客户端的功能范围和验证进度不同，Android 的新增功能不表示 Python 已同步更新。
 
-**最近测试时间：2026 年 10 月 4 日。vivo 修复版本已转为 Android 最新正式发布，当前适配与验证基准为元气骑士 8.6.0。** 本次新增实测范围为 vivo 渠道的角色和皮肤解锁；游戏更新可能改变存档格式，这个日期不代表所有后续版本、渠道和条目都已验证。
+**文件读写最近测试时间：2026 年 10 月 9 日。最新 Android 正式版为 2.0.2，当前存档适配基准仍为元气骑士 8.6.0。** 本次在 Pixel 6 / Android 16 上通过了原生 Root 和 Shizuku Root 的合成文件读写、原件备份、事务恢复及 owner、mode、SELinux context 检查；未修改真实游戏存档，也未验证游戏内效果。**不保证实际可用**；OnePlus / APatch 等反馈环境仍待用户复测。此前 vivo 角色和皮肤解锁的用户实测记录保留。
 
 ## 下载与版本
 
-**[下载 Android 最新正式版 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.1-rc01/SoulKnightSaveEditor-2.0.1-rc01.apk)** · [查看发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)
+**[下载 Android 最新正式版 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.2/SoulKnightSaveEditor-2.0.2.apk)** · [查看发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.2)
 
-当前 Android 正式发布标签为 **`v2.0.1-rc01`**，APK 内版本为 **`2.0.1-rc01` / versionCode 17**。2026-10-04 按用户要求由预发布转正，保留已实测 APK、标签和文件名，因此版本字符串仍带 `rc01`；Release 类别已为正式版。后续继续完善功能和体验。
+当前 Android 正式发布标签为 **`v2.0.2`**，APK 内版本为 **`2.0.2` / versionCode 18**。本版修复目录检查与 Root 错误分类，增加可选的 Shizuku Root 通道；原生 Root 继续默认，已有用户无需安装 Shizuku。变更、测试边界和首次读取验证步骤见 [2.0.2 发布说明](docs/releases/2.0.2.md)。
 
-[上一正式版 2.0.0（v1）](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1) 保留为历史版本；`v1` 表示首个 Android 正式发布里程碑。
+[上一正式版 2.0.1-rc01](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01) 和 [2.0.0（v1）](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v1) 保留为历史版本；`v1` 表示首个 Android 正式发布里程碑。
 
 `2.0.1-rc01` / versionCode 17 修复 vivo 渠道服 8.6.0 的十六进制账号识别问题，用户已实测角色和皮肤解锁成功；其余功能在本次 vivo 样本上的验证仍限于离线检查。该包沿用正式签名，可覆盖更新 `2.0.0`。以上 `v1` 正式版附件不包含此修复；其他渠道继续等待社区反馈，详见 [vivo 适配档案](docs/vivo-channel-2.0.1-rc01.md)。
 
 | 客户端 | 目录 | 当前状态 |
 | --- | --- | --- |
-| Android 本地助手 | [`android/`](android/) | 最新正式版 `2.0.1-rc01`；Android 7.0 及以上，需要 Root，仅处理本机文件 |
+| Android 本地助手 | [`android/`](android/) | 最新正式版 `2.0.2`；Android 7.0 及以上，需要 Root，原生 Root 默认、Shizuku Root 可选，仅处理本机文件 |
 | Python 桌面工具 | [`desktop/`](desktop/) | 1.x 系列；将用户准备的存档放入输入目录，结果输出到另一目录 |
 
 ## 开始使用 Android 版
@@ -26,6 +28,8 @@ Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑�
 3. 在「设置 → 备份」中选择应用以外的文件夹，先导出原始备份。
 4. 在「角色／物品／武器」页设置修改项，查看预览后确认写入。
 5. 写入后查看结果，再进入游戏检查；连续编辑时会按已选路径读取最新内容，无需重复寻找文件。
+
+需要使用备选通道时，在设置的「存档访问方式」中选择 Shizuku Root，另行安装 Shizuku 并通过 Root 启动，再按按钮授权和检查。ADB 模式不能访问本应用所需的游戏私有存档，应用不会自动切回原生 Root。切换通道后须重新读取；操作进行中或有未完成事务时不能切换。排查 [Issue #4](https://github.com/Show-o4210/Soul-Knight-Save-Editor/issues/4) 时，请先检查授权、复制本地访问诊断并读取存档，无需先尝试写入。
 
 扫描、刷新和写入会关闭所选游戏进程。请先退出游戏，再操作存档。维护者的 Root 真机测试中，游戏本身可能闪退，即便没有修改也会发生；建议使用自己可备份的虚拟机环境。
 
@@ -45,7 +49,7 @@ Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑�
 - 快速模式的“武器”页提供获取次数统一 +8，默认关闭。使用实测有效的 `object2ObtainTime`；补齐 416 个已映射编号武器的缺失记录，并累加已有其他武器记录。特殊武器的其他资格仍由游戏判断，专家模式支持名称／ID 搜索与所选条目自定义非负增量，详见 [alpha11 武器规则](docs/quick-weapons-alpha11.md)。
 - 识别 `game.data`、PlayerPrefs XML 和按 UID 对应的 `item_data`、`statistic`；物品与武器不依赖角色文件存在。修改前显示预览，写前保存原件，写后复读，并在失败时尝试恢复。写回后弹出结果窗口，展开可查看成功项和失败原因。
 - 可导出限定范围内本地 `.data` 分片与 PlayerPrefs XML 的 ZIP 备份。**当前不能导入 ZIP 或整包恢复；除角色文件、item 和 statistic 外，其余分片只供备份。**
-- 首次写入前要求确认仅操作自己的本地存档；应用没有联网权限。设备上必须为应用授予 Root 权限。
+- 首次写入前要求确认仅操作自己的本地存档；应用没有联网权限。需要原生 Root 授权，或通过 Root 启动且向本应用授权的 Shizuku。
 
 快速／专家共用扫描、能力报告、组合预览与事务保存，两种模式草稿独立。支持会话固定路径、预览前重读、写后自动刷新；说明收进“？”、包名折叠，并更新导航和动画，详见[体验档案](docs/experience-alpha13.md)。实现基线与接口见[alpha12 开发档案](docs/core-api-alpha12.md)，实际验证范围见[开发状态](docs/development-status.md)和 [Android 说明](android/README.md)。用户已测样本有效，**不代表所有专家条目、渠道和游戏版本均已验收**，后续功能与体验继续完善。
 
@@ -59,6 +63,6 @@ Android 客户端「骑士档案馆」与 Python 桌面工具，供用户编辑�
 
 ## 版本说明
 
-`v1.0.1` 是旧桌面客户端版本；`v2.0.0-alpha05` 是此前的 Android 开发预览。`v1` 为首个 Android 正式版 `2.0.0`；最新正式版为已转正的 `2.0.1-rc01`，标签为 `v2.0.1-rc01`。此前 alpha 包使用调试签名，alpha10 两武器试验版因选错计数字段而撤回。正式版是发布里程碑，不是项目最终交付，也不表示覆盖全部游戏版本。安装前请保留原始存档和助手内部所需备份。
+`v1.0.1` 是旧桌面客户端版本；`v2.0.0-alpha05` 是此前的 Android 开发预览。`v1` 为首个 Android 正式版 `2.0.0`；`2.0.1-rc01` 于 2026-10-04 保留原版本字符串转为正式发布；最新正式版为 `2.0.2`，标签为 `v2.0.2`。此前 alpha 和本次 `2.0.2-root01` 开发候选使用调试签名，alpha10 两武器试验版因选错计数字段而撤回。正式发布不表示所有设备、渠道或游戏版本都已验证，也不保证实际可用。安装前请保留原始存档和助手内部所需备份。
 
 本项目与凉屋游戏无关。请仅操作自己有权处理的本地文件。游戏更新可能改变存档格式；存档损坏、进度冲突及账号影响均需使用者自行评估。

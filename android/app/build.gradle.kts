@@ -35,8 +35,8 @@ android {
         applicationId = "com.example.soul_knight_save_editor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.0.1-rc01"
+        versionCode = 18
+        versionName = "2.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,6 +59,7 @@ android {
     buildTypes {
         release {
             isDebuggable = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseSigning != null) signingConfig = signingConfigs.getByName("official")
             optimization {
                 enable = true
@@ -71,6 +72,7 @@ android {
     }
     buildFeatures {
         compose = true
+        aidl = true
     }
     testOptions.unitTests.all {
         it.systemProperty("unlock.baseline", providers.gradleProperty("unlockBaseline").orNull ?: "")
@@ -87,6 +89,8 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach {
 }
 
 dependencies {
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

@@ -12,6 +12,8 @@ data class SaveSnapshot(val packageName: String, val user: Int, val prefs: SaveF
 }
 data class SavePlan(val outputs: Map<String, ByteArray>, val changes: List<String>, val sections: Map<String, List<String>> = emptyMap())
 interface DeviceStorage {
+    val backendId: String get() = "native-root"
+    fun assertIdleForRecovery() {}
     fun stop(packageName: String, user: Int)
     fun read(path: String): SaveFile
     fun replace(file: SaveFile, bytes: ByteArray)
@@ -42,6 +44,13 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     private fun records(): List<File> = directory.listFiles().orEmpty().filter { it.isDirectory && File(it, "manifest.json").exists() }.sortedByDescending { it.name }
     fun pending(): List<String> = records().filter { stateOf(it) !in setOf("complete", "rolled_back", "restored") }.map { it.name }
     fun packageName(id: String): String = manifest(folder(id)).getValue("package").jsonPrimitive.content
+    fun backendId(id: String): String {
+        val record = folder(id)
+        val state = File(record, "state")
+        val selected = if (state.exists()) state.readText().substringBeforeLast('\n', "").lineSequence()
+            .lastOrNull { it.startsWith("backend:") }?.removePrefix("backend:") else null
+        return selected ?: manifest(record)["backend"]?.jsonPrimitive?.content ?: "native-root"
+    }
     fun completed(packageName: String? = null): List<String> = records().filter {
         stateOf(it) == "complete" && (packageName == null || manifest(it)["package"]?.jsonPrimitive?.content == packageName)
     }.map { it.name }
@@ -95,6 +104,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         }
         persist(File(folder, "manifest.json"), buildJsonObject {
             put("schema", 1); put("package", snapshot.packageName); put("user", snapshot.user)
+            put("backend", device.backendId)
             snapshot.prefs?.let { put("prefsPath", it.path) }; snapshot.game?.let { put("gamePath", it.path) }
             put("entries", JsonArray(entries))
         }.toString())
@@ -110,6 +120,10 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
             status(folder, "complete")
             return id
         } catch (error: Exception) {
+            if (generateSequence<Throwable>(error) { it.cause }.any { it is AccessFailure && it.uncertainWrite }) {
+                status(folder, "recovery_required")
+                throw IllegalStateException("写回结果尚未确定，备份与事务已保留；请等待通道确认写任务结束后，手动恢复未完成事务（$id）", error)
+            }
             val recovery = runCatching { recover(id) }
             if (recovery.isFailure) {
                 status(folder, "recovery_required")
@@ -129,6 +143,10 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     @Synchronized fun recover(id: String) {
         val folder = folder(id)
         val manifest = manifest(folder)
+        if (stateOf(folder) !in setOf("complete", "rolled_back", "restored")) {
+            require(backendId(id) == device.backendId) { "未完成事务必须使用原存档访问方式恢复" }
+        }
+        device.assertIdleForRecovery()
         device.stop(manifest.getValue("package").jsonPrimitive.content, manifest.getValue("user").jsonPrimitive.int)
         val entries = manifest.getValue("entries").jsonArray
         // Unknown third-party changes are never overwritten by automatic crash recovery.
@@ -139,9 +157,21 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
             val live = device.read(before.path)
             require(same(live, before) || same(live, after)) { "检测到事务外的新变化，自动恢复已暂停；请保留备份" }
         }
+        // A manual restore may use the selected backend. Persist it before any replacement so
+        // an interrupted restore is pending and cannot continue through a different backend.
+        if (backendId(id) != device.backendId) {
+            // The existing append-only journal also works on hosts where renameTo cannot
+            // replace a manifest. A crash after this line already makes the record pending.
+            status(folder, "backend:${device.backendId}")
+        }
+        status(folder, "recovering")
         entries.indices.reversed().forEach { index ->
-            val before = entryFile(folder, index, entries[index].jsonObject, "before")
-            if (!same(device.read(before.path), before)) device.replace(before, before.bytes)
+            val entry = entries[index].jsonObject
+            val before = entryFile(folder, index, entry, "before")
+            val after = entryFile(folder, index, entry, "after")
+            val live = device.read(before.path)
+            require(same(live, before) || same(live, after)) { "恢复前检测到事务外的新变化，已停止；请保留备份" }
+            if (!same(live, before)) device.replace(before, before.bytes)
             require(same(device.read(before.path), before)) { "恢复复读失败" }
         }
         status(folder, "rolled_back")

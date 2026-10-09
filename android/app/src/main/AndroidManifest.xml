@@ -4,6 +4,7 @@
 
     <!-- Recognized by common root managers; ignored harmlessly on stock Android. -->
     <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <!-- Launcher-app labels for user-selected local save candidates; no all-packages permission. -->
     <queries>
         <intent>
@@ -21,6 +22,13 @@
         android:roundIcon="@drawable/app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.SoulKnightSaveEditor">
+        <provider
+            android:name=".unlock.ShizukuOnlyProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
         <activity
             android:name=".unlock.MainActivity"
             android:exported="true"

@@ -1,8 +1,12 @@
 # Android 本地助手
 
-这是需要 Root 的本地存档助手。**最新正式发布为 2.0.1-rc01，最近测试时间为 2026 年 10 月 4 日，当前适配与验证基准为元气骑士 8.6.0。** [下载正式版](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)；GitHub 发布标签为 `v2.0.1-rc01`，APK 内版本为 `2.0.1-rc01` / versionCode 17。本次新增实测为 vivo 角色和皮肤解锁，不代表所有后续游戏版本或渠道均已验证。
+当前源码与最新正式版为 **`2.0.2` / versionCode 18**，GitHub 标签为 `v2.0.2`：[下载正式 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.2/SoulKnightSaveEditor-2.0.2.apk) · [发布说明](../docs/releases/2.0.2.md)。本版修复目录检查的 Root 错误分类，增加可显式选择的 Shizuku Root 通道；原生 Root 继续默认，旧用户无需安装 Shizuku，也不会自动请求其授权。
 
-当前源码为 **`2.0.1-rc01` / versionCode 17**，已在 [v2.0.1-rc01 正式发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开：加入 vivo 8.6.0 已确认的 16 位小写十六进制账号，统一 XML、物品与统计分片识别；原有数字账号继续保留。2026-10-04 核心回归及 vivo 私有样本离线验证通过，用户实测角色、皮肤解锁成功；其余 vivo 功能仍待游戏内验证。由预发布转正时保留已测试 APK，版本字符串仍为 `2.0.1-rc01`；沿用正式签名，可覆盖更新正式 `2.0.0`。`v1` 附件不包含此修复。规则、边界与验收步骤见 [vivo 适配档案](../docs/vivo-channel-2.0.1-rc01.md)。
+这是需要 Root 的本地存档助手。**文件读写最近测试时间为 2026 年 10 月 9 日，存档适配基准仍为元气骑士 8.6.0。** 本次在 Pixel 6 / Android 16 上验证应用自身合成目录中的文件读写、原件备份、事务恢复及 owner、mode、SELinux context；原生 Root 和 Shizuku Root 通道测试通过。未修改真实游戏存档或验证游戏内效果，OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，**不保证实际可用**。开发候选的详细修改与测试记录见 [Root / Shizuku 验证记录](../docs/root-shizuku-validation.md)。
+
+设置 → 存档访问方式可选择「原生 Root（默认）」或「Shizuku Root（备选）」。Shizuku 需要另行安装并通过 Root 启动；选择后通过按钮授权、检查服务 UID 和 UserService 身份，再读取目标存档。ADB 模式会明确拒绝私有存档访问，不能作为免 Root 方案。一个操作和事务固定使用一个后端，操作中或有未完成事务时禁止切换；切换后旧快照、草稿和预览失效，需重新读取。失败诊断仅在本地展示和复制，不上传存档或日志。
+
+上一正式源码为 **`2.0.1-rc01` / versionCode 17**，已在 [v2.0.1-rc01 正式发布页](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/tag/v2.0.1-rc01)公开：加入 vivo 8.6.0 已确认的 16 位小写十六进制账号，统一 XML、物品与统计分片识别；原有数字账号继续保留。2026-10-04 核心回归及 vivo 私有样本离线验证通过，用户实测角色、皮肤解锁成功；其余 vivo 功能仍待游戏内验证。由预发布转正时保留已测试 APK，版本字符串仍为 `2.0.1-rc01`。2.0.2 保留这些修复；历史 `v1` 附件不包含 vivo 修复。规则、边界与验收步骤见 [vivo 适配档案](../docs/vivo-channel-2.0.1-rc01.md)。
 
 打开本目录作为 Android Studio 项目，或在本目录使用 JDK 21 构建调试包：
 
@@ -10,7 +14,7 @@
 .\gradlew.bat testDebugUnitTest assembleDebug lintDebug
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签名。正式 Release 构建读取仓库外签名配置，步骤见[签名文档](../docs/android-signing.md)。2.0.0 / versionCode 16 正式包无法覆盖历史调试包；请先导出内部备份，具体见[迁移说明](../docs/releases/2.0.0.md)。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签名。正式 Release 构建读取仓库外签名配置，步骤见[签名文档](../docs/android-signing.md)。2.0.2 正式包可覆盖同正式签名的 2.0.0 / 2.0.1-rc01；历史 alpha 和 `2.0.2-root01` Debug 候选签名不同，不能直接覆盖。请先导出内部备份并处理未完成事务，具体见[迁移说明](../docs/releases/2.0.0.md)。
 
 ## 当前编辑范围
 
