@@ -4,6 +4,8 @@
 
 **[下载 Android 2.0.3 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.3/SoulKnightSaveEditor-2.0.3.apk)** · **[第一次使用：图文教学](docs/help/getting-started.md)** · **[帮助中心](docs/help/README.md)**
 
+[加入我们 · QQ 群聊](https://qm.qq.com/q/9Sg9mdgarY)：也可点击应用标题卡片旁带群组图标的“加入我们”按钮，通过 QQ 或浏览器打开邀请链接。
+
 **2.0.3 新增**：[自由编辑模式](docs/help/free-editing.md)可解码 `.data` 到自选目录，通过应用选择器使用外部工具编辑，再导入打包；多余文件先比较哈希，再按文件名前缀对应，冲突可选择或跳过。[备份](docs/help/backup-and-update.md)支持 ZIP 导入和原件还原、重命名，默认按“存档#0”递增且不限保留数量，可在设置限制数量并自动删除最旧备份。还原时对应账号已有的本地读取开关强制设为 0，即使原件为 1。
 
 适用于 **Android 7.0 及以上、已 Root 的设备**。默认使用原生 Root，也可选择通过 Root 启动的 Shizuku。当前存档适配基准为**元气骑士 8.6.0**，其他版本、渠道与机型需要分别验证。

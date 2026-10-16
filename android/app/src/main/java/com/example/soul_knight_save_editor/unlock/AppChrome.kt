@@ -1,5 +1,8 @@
 package com.example.soul_knight_save_editor.unlock
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,29 +24,35 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
+import com.example.soul_knight_save_editor.R
 
 @Composable internal fun AnimatedHeader(mode: AssistantMode?, page: AssistantPage, busy: Boolean, compact: Boolean,
     onTitleClick: () -> Unit, onGuide: () -> Unit, onSettings: () -> Unit, onBack: () -> Unit) {
-    val height by animateDpAsState(if (compact) 40.dp else 72.dp, spring(stiffness = 500f), label = "header-height")
-    val logo by animateDpAsState(if (compact) 24.dp else 44.dp, label = "header-logo")
-    val font by animateFloatAsState(if (compact) 16f else 22f, label = "header-title")
+    val height by animateDpAsState(if (compact) 48.dp else 72.dp, spring(stiffness = 500f), label = "header-height")
+    val logo by animateDpAsState(if (compact) 24.dp else if (mode != null) 32.dp else 44.dp, label = "header-logo")
+    val font by animateFloatAsState(if (compact) 16f else if (mode != null) 18f else 22f, label = "header-title")
     val modeText = mode?.label.orEmpty()
-    Surface(onClick = onTitleClick, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp).height(height).testTag("app-header"),
+    val context = LocalContext.current
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+    Surface(onClick = onTitleClick, modifier = Modifier.weight(1f).height(height).testTag("app-header"),
         shape = RoundedCornerShape(if (compact) 20.dp else 24.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = .65f), contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))) {
-        Row(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(logo), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = .85f), contentColor = MaterialTheme.colorScheme.onPrimary) {
                 Box(contentAlignment = Alignment.Center) { Text("SK", fontSize = if (compact) 10.sp else 16.sp, fontWeight = FontWeight.Bold) }
             }
-            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("骑士档案馆", fontSize = font.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false))
@@ -58,6 +67,20 @@ import kotlin.math.abs
                 } else TextButton(onBack, enabled = !busy, modifier = Modifier.width(46.dp), contentPadding = PaddingValues(2.dp)) { Text("返回", fontSize = 12.sp) }
             }
         }
+    }
+    FilledTonalButton(onClick = {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://qm.qq.com/q/9Sg9mdgarY")))
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(context, "无法打开群聊链接，请安装 QQ 或浏览器后重试。", Toast.LENGTH_LONG).show()
+        }
+    }, enabled = !busy, modifier = Modifier.width(76.dp).height(height).testTag("join-us"),
+        shape = RoundedCornerShape(if (compact) 20.dp else 24.dp), contentPadding = PaddingValues(4.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Icon(painterResource(R.drawable.ic_group), contentDescription = null, modifier = Modifier.size(if (compact) 16.dp else 20.dp))
+            Text("加入我们", fontSize = 12.sp, maxLines = 1)
+        }
+    }
     }
 }
 
