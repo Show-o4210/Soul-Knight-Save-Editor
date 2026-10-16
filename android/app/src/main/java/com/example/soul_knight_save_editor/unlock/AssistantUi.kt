@@ -58,6 +58,9 @@ private val quickColors = lightColorScheme(primary = Color(0xFF66509C), onPrimar
 private val expertColors = darkColorScheme(primary = Color(0xFFD5BFFF), onPrimary = Color(0xFF302047),
     background = Color(0xFF1D1330), surface = Color(0xFF2B2041), surfaceVariant = Color(0xFF3C2E56),
     onSurface = Color(0xFFF6EEFF), onSurfaceVariant = Color(0xFFCEBEDF), outlineVariant = Color(0xFF65527E))
+private val freeColors = darkColorScheme(primary = Color(0xFF81D8CF), onPrimary = Color(0xFF003A36),
+    background = Color(0xFF102927), surface = Color(0xFF1C3633), surfaceVariant = Color(0xFF2D4945),
+    onSurface = Color(0xFFE4F5F1), onSurfaceVariant = Color(0xFFB5CDC8), outlineVariant = Color(0xFF526D67))
 private val guideColors = darkColorScheme(primary = Color(0xFFE1D0FB), onPrimary = Color(0xFF38264F),
     background = Color(0xFF675A7B), surface = Color(0xFF423550),
     onSurface = Color(0xFFFFF8FF), onSurfaceVariant = Color(0xFFE8DBF3), outlineVariant = Color(0xFFA995BF))
@@ -68,7 +71,8 @@ private fun Hero.label() = "${names[name] ?: name} · c$index"
 private fun accountLabel(value: String) = if (value.isEmpty()) "本地账号" else "账号 …${value.takeLast(4)}"
 private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(value))
 
-@Composable fun AssistantApp(model: AssistantModel, chooseFolder: () -> Unit, openFolder: () -> Unit) {
+@Composable fun AssistantApp(model: AssistantModel, chooseFolder: () -> Unit, openFolder: () -> Unit, importBackup: () -> Unit = {},
+    chooseFreeFolder: () -> Unit = {}, importFreeFiles: () -> Unit = {}) {
     val state = model.state
     val view = LocalView.current
     var headerCompact by remember { mutableStateOf(false) }
@@ -118,7 +122,7 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
         else (fadeIn(tween(180)) + slideInHorizontally(tween(240)) { it / 16 }) togetherWith
             (fadeOut(tween(120)) + slideOutHorizontally(tween(180)) { -it / 16 })
     }) { (mode, page) ->
-        val palette = when (mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors }
+        val palette = when (mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors; AssistantMode.FREE -> freeColors }
         MaterialTheme(colorScheme = palette) {
             Box(Modifier.fillMaxSize()) {
                 Image(painterResource(if (mode == AssistantMode.QUICK) R.drawable.background_quick else R.drawable.background_expert), null,
@@ -131,8 +135,10 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
                         { model.page(AssistantPage.SETTINGS) }, model::back)
                     if (mode == null) Guide(model, Modifier.weight(1f))
                     else when (page) {
-                        AssistantPage.WORKSPACE -> WorkspaceContent(model, mode, Modifier.weight(1f))
-                        AssistantPage.BACKUPS -> Backups(model, chooseFolder, openFolder, Modifier.weight(1f))
+                        AssistantPage.WORKSPACE -> if (mode == AssistantMode.FREE && state.workspaceTab != WorkspaceTabs.saves.id)
+                            FreeEditPage(model, chooseFreeFolder, importFreeFiles, Modifier.weight(1f))
+                            else WorkspaceContent(model, mode, Modifier.weight(1f))
+                        AssistantPage.BACKUPS -> Backups(model, chooseFolder, openFolder, importBackup, Modifier.weight(1f))
                         AssistantPage.SETTINGS -> Settings(model, Modifier.weight(1f))
                     }
                     if (mode != null && page == AssistantPage.WORKSPACE) MainTabs(state, model)
@@ -140,7 +146,7 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
             }
         }
     }
-    MaterialTheme(colorScheme = when (state.mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors }) {
+    MaterialTheme(colorScheme = when (state.mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors; AssistantMode.FREE -> freeColors }) {
         Preview(model)
         state.applyOutcome?.let { ApplyOutcomeDialog(it, model::dismissApplyOutcome) }
         cheerFirst?.let { first -> ShowcheerEgg(first) { cheerFirst = null } }
@@ -168,16 +174,18 @@ private val workspaceSections = listOf(
 }
 
 @Composable private fun MainTabs(state: AssistantState, model: AssistantModel) {
-    WorkspaceTabBar(state, workspaceSections.map { it.tab }, model::tab)
+    WorkspaceTabBar(state, if (state.mode == AssistantMode.FREE) listOf(WorkspaceTabs.saves, WorkspaceTabs.free) else workspaceSections.map { it.tab }, model::tab)
 }
 
 @Composable private fun Guide(model: AssistantModel, modifier: Modifier) {
     val state = model.state
-    Column(modifier.padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ModeCard("快速模式", "角色、物品与武器快捷修改", "选择角色、物品或武器获取次数；预览后再应用。", false,
-            Modifier.weight(1f).fillMaxWidth()) { model.chooseMode(AssistantMode.QUICK) }
+            Modifier.height(204.dp).fillMaxWidth()) { model.chooseMode(AssistantMode.QUICK) }
         ModeCard("专家模式", "角色、物品与武器逐项选择", "选择条目与参数，预览后统一写回。", true,
-            Modifier.weight(1f).fillMaxWidth()) { model.chooseMode(AssistantMode.EXPERT) }
+            Modifier.height(204.dp).fillMaxWidth()) { model.chooseMode(AssistantMode.EXPERT) }
+        ModeCard("自由编辑", "导出解码文件 · 外部应用编辑 · 导入打包", "自行修改文件内容；这里不内置文本编辑器。", true,
+            Modifier.height(204.dp).fillMaxWidth(), tag = "choose-free") { model.chooseMode(AssistantMode.FREE) }
         Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .78f),
             contentColor = MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
@@ -189,8 +197,9 @@ private val workspaceSections = listOf(
     }
 }
 
-@Composable private fun ModeCard(title: String, caption: String, description: String, dark: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(onClick, shape = RoundedCornerShape(24.dp), modifier = modifier.testTag(if (dark) "choose-expert" else "choose-quick")) {
+@Composable private fun ModeCard(title: String, caption: String, description: String, dark: Boolean, modifier: Modifier,
+    tag: String = if (dark) "choose-expert" else "choose-quick", onClick: () -> Unit) {
+    Card(onClick, shape = RoundedCornerShape(24.dp), modifier = modifier.testTag(tag)) {
         Box(Modifier.fillMaxSize()) {
             Image(painterResource(if (dark) R.drawable.background_expert else R.drawable.background_quick), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
             Box(Modifier.matchParentSize().background((if (dark) Color(0xFF25153F) else Color(0xFFF8F1FF)).copy(alpha = .77f)))
@@ -326,9 +335,11 @@ private val workspaceSections = listOf(
     }
 }
 
-@Composable private fun Backups(model: AssistantModel, chooseFolder: () -> Unit, openFolder: () -> Unit, modifier: Modifier) {
+@Composable private fun Backups(model: AssistantModel, chooseFolder: () -> Unit, openFolder: () -> Unit, importBackup: () -> Unit, modifier: Modifier) {
     val state = model.state
     var restoreId by remember { mutableStateOf<String?>(null) }
+    var renameId by remember { mutableStateOf<String?>(null) }
+    var renameText by remember { mutableStateOf("") }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Panel {
             Text("备份与恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -343,7 +354,9 @@ private val workspaceSections = listOf(
                 OutlinedButton(openFolder, enabled = !state.busy && state.folder != null, modifier = Modifier.weight(1f)) { Text("打开文件夹") }
             }
             CheckLine("导出成功后自动打开文件夹", state.autoOpenFolder, !state.busy, model::autoOpen)
-            Button(model::backupNow, enabled = !state.busy && state.folder != null && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth()) { Text("备份当前本地存档") }
+            Button(model::backupNow, enabled = !state.busy && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth()) { Text("备份当前本地存档") }
+            OutlinedButton(importBackup, enabled = !state.busy && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth()) { Text("导入备份 ZIP") }
+            Text(if (state.backupLimit == 0) "应用内备份不限数量。可在设置中更改保留上限。" else "每个游戏最多保留 ${state.backupLimit} 份，超出后删除最旧备份。", style = MaterialTheme.typography.bodySmall)
         } }
         item { Status(state) }
         items(state.pending, key = { "pending-$it" }) { id -> Panel {
@@ -352,39 +365,49 @@ private val workspaceSections = listOf(
             Text(timestamp(id.substringBefore('-').toLongOrNull() ?: 0))
             Button({ model.restore(id, true) }, enabled = !state.busy) { Text("恢复未完成事务") }
         } }
-        val archives = state.archives.filter { it.packageName == state.packageName }
-        if (archives.isNotEmpty()) item { Section("当前版本的备份包", "应用内还保留一份副本；外部目录中的文件不受卸载助手影响。") }
-        items(archives, key = { it.file.name }) { info -> Panel {
-            Text(if (info.kind == "local-save") "当前本地存档" else "修改前原件", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("${timestamp(info.createdAt)} · ${info.count} 个文件 · ${info.file.length() / 1024} KB", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(info.packageName, style = MaterialTheme.typography.labelSmall)
-            OutlinedButton({ model.exportArchive(info) }, enabled = !state.busy && state.folder != null) { Text("导出此备份包") }
-        } }
-        if (state.originalBackups.isNotEmpty()) item { Section("修改前原件", "仅包含当次实际改动文件的原件，不等同于全部本地分片。") }
-        items(state.originalBackups, key = { "original-$it" }) { id -> Panel {
-            Text(timestamp(id.substringBefore('-').toLongOrNull() ?: 0), fontWeight = FontWeight.SemiBold)
+        val records = state.backupRecords.filter { it.packageName == state.packageName }
+        if (records.isNotEmpty()) item { Section("当前游戏的备份", "本地快照与修改前原件按时间排列。外部导出副本不参与自动清理。") }
+        items(records, key = { it.key }) { record -> Panel {
+            Text(state.backupNames[record.key].orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${timestamp(record.createdAt)} · ${record.count} 个文件 · ${if (record.kind == "local-save") "本地存档快照" else "修改前原件"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (record.kind == "pre-change") Text("仅还原备份内的文件，不是全部游戏数据。", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton({ model.exportOriginal(id) }, enabled = !state.busy && state.folder != null) { Text("导出原件") }
-                if (id in state.backups) TextButton({ restoreId = id }, enabled = !state.busy && state.pending.isEmpty()) { Text("恢复原件") }
+                TextButton({ renameId = record.key; renameText = state.backupNames[record.key].orEmpty() }, enabled = !state.busy) { Text("重命名") }
+                TextButton({
+                    if (record.key.startsWith("transaction:")) model.exportOriginal(record.key.removePrefix("transaction:"))
+                    else state.archives.singleOrNull { "archive:${it.file.name}" == record.key }?.let(model::exportArchive)
+                }, enabled = !state.busy && state.folder != null) { Text("导出") }
+                TextButton({ restoreId = record.key }, enabled = !state.busy && state.pending.isEmpty()) { Text("还原存档") }
             }
         } }
 
     }
-    restoreId?.let { id -> AlertDialog(onDismissRequest = { restoreId = null }, title = { Text("恢复修改前原件？") },
-        text = { Text("会关闭游戏并核对文件。若游戏已产生后续变化，将拒绝覆盖，保留备份。") },
-        confirmButton = { Button({ restoreId = null; model.restore(id, false) }) { Text("确认恢复") } }, dismissButton = { TextButton({ restoreId = null }) { Text("取消") } }) }
+    restoreId?.let { id -> AlertDialog(onDismissRequest = { restoreId = null }, title = { Text("还原 ${state.backupNames[id].orEmpty()}？") },
+        text = { Text("目标游戏：${state.packageName}\n将关闭游戏，把备份内的文件覆盖回原位置，对应账号已有的读取开关设为 0。后续本地进度会被覆盖；还原前会自动备份当前文件，失败时恢复。不会删除备份之外的文件。") },
+        confirmButton = { Button({ restoreId = null; model.restoreBackup(id) }) { Text("确认还原") } }, dismissButton = { TextButton({ restoreId = null }) { Text("取消") } }) }
+    renameId?.let { id -> AlertDialog(onDismissRequest = { renameId = null }, title = { Text("重命名备份") },
+        text = { OutlinedTextField(renameText, { renameText = it }, label = { Text("备份名称") }, singleLine = true) },
+        confirmButton = { Button({ renameId = null; model.renameBackup(id, renameText) }, enabled = renameText.isNotBlank()) { Text("保存") } },
+        dismissButton = { TextButton({ renameId = null }) { Text("取消") } }) }
 }
 
 @Composable private fun Settings(model: AssistantModel, modifier: Modifier) {
     val state = model.state
     val context = LocalContext.current
     var showDiagnostic by remember { mutableStateOf(false) }
+    var backupLimit by remember(state.backupLimit) { mutableStateOf(if (state.backupLimit == 0) "" else state.backupLimit.toString()) }
     LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Panel {
             Text("公共设置", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("当前游戏：${state.packageName}", style = MaterialTheme.typography.bodySmall)
             OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("选择游戏与扫描存档") }
             Button({ model.page(AssistantPage.BACKUPS) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth().testTag("settings-backups")) { Text("备份与恢复${if (state.pending.isNotEmpty()) " · 有待恢复事务" else ""}") }
+        } }
+        item { Panel("备份保留") {
+            Text("默认不限数量。上限按游戏分别计算，本地快照与修改前原件合计；保存后立即删除超出的最旧备份。未完成事务和外部导出副本不参与清理。", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(backupLimit, { backupLimit = it }, label = { Text("保留上限（留空或 0 表示不限）") },
+                singleLine = true, enabled = !state.busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            OutlinedButton({ model.backupLimit(backupLimit) }, enabled = !state.busy) { Text("保存保留上限") }
         } }
         item { Panel("存档访问方式") {
             AccessBackend.entries.forEach { backend ->
@@ -423,7 +446,7 @@ private val workspaceSections = listOf(
         } }
         item { Panel {
             Text("共同的边界", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("两种模式使用相同的备份和写回校验。快速模式按类别准备角色、宠物、物品与武器修改；专家模式支持逐项选择和数量参数。不操作 .data.new 及游玩记录。")
+            Text("各模式共用备份与写回校验。快速模式按类别修改，专家模式逐项选择，自由编辑通过外部应用修改文件；自由编辑不检查业务字段关系。不操作 .data.new。")
             if (!state.personalUseAccepted) OutlinedButton(model::requestConsent) { Text("确认个人使用约定") }
             Text("本地运行，无联网权限", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }
@@ -435,7 +458,8 @@ private val workspaceSections = listOf(
     var expanded by remember(state.preview) { mutableStateOf(false) }
     state.preview?.let { patch -> AlertDialog(onDismissRequest = model::dismiss, title = { FeatureTitle("确认本次修改", HelpTopic("修改说明", "目标版本：${state.snapshot?.packageName}\n\n应用前会关闭游戏、核对原件、创建备份并写入。账号已有的本地读取开关会设为 0；缺失开关不新增。切换模式不会混入另一套草稿。")) }, text = {
         LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { Text("${state.catalog?.account?.let(::accountLabel)} · ${if (state.previewMode == AssistantMode.QUICK) "快速模式" else "专家模式"}\n将修改 ${patch.outputs.size} 份存档，修改前会自动备份。") }
+            item { Text("${state.previewMode?.label.orEmpty()}\n将修改 ${patch.outputs.size} 份存档，修改前会自动备份。") }
+            if (state.previewMode == AssistantMode.FREE) item { Text("仅检查格式与编码，不修正字段、镜像或分片关系。游戏能否加载用户修改后的内容，由用户自行判断。") }
             items(patch.sections.entries.toList()) { (name, entries) -> Text("$name：${entries.size} 项变化", fontWeight = FontWeight.Bold) }
             item { TextButton({ expanded = !expanded }) { Text(if (expanded) "收起逐项变化" else "展开 ${patch.changes.size} 项变化") } }
             if (expanded) items(patch.changes) { Text("• $it", style = MaterialTheme.typography.bodySmall) }

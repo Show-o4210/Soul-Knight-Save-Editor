@@ -32,6 +32,9 @@ interface SaveAccess : DeviceStorage, AutoCloseable {
     fun discover(user: Int, preferred: String, ownPackage: String, isCancelled: () -> Boolean,
         progress: (DiscoveryProgress) -> Unit, found: (GameCandidate) -> Unit): DiscoveryProgress
     fun backup(packageName: String, user: Int): BackupPayload
+    fun freeSnapshot(packageName: String, user: Int): SaveSnapshot = backup(packageName, user).let {
+        SaveSnapshot(it.packageName, it.user, null, null, it.files)
+    }
     override fun assertIdleForRecovery() {}
 }
 
@@ -44,6 +47,32 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
     abstract fun version(packageName: String): String
     abstract fun backupPaths(packageName: String, user: Int): List<String>
     abstract fun readBackup(path: String): SaveFile
+
+    final override fun freeSnapshot(packageName: String, user: Int): SaveSnapshot {
+        val root = SaveLayout.root(packageName, user)
+        stop(packageName, user)
+        require(exists(root)) { "未找到所选游戏的数据目录" }
+        val paths = backupPaths(packageName, user)
+        require(paths.isNotEmpty() && paths.size <= 120) { "没有找到 .data 文件，或文件数量超过当前支持范围" }
+        var total = 0L
+        fun readBounded(path: String): SaveFile = readBackup(path).also {
+            total += it.bytes.size
+            require(total <= BackupArchive.MAX_TOTAL_BYTES) { "本地文件总量超过 64 MiB" }
+        }
+        val data = paths.map(::readBounded)
+        val prefsPaths = list(root, SaveSource.PREFS)
+        require(prefsPaths.size <= 128) { "配置文件过多" }
+        val prefs = prefsPaths.map(::readBounded).filter { file ->
+            runCatching {
+                UnlockEngine.prefs(file.bytes).keys.any { key -> key == "OpenRijTest" || key == "OpenNewtonJsonTest" ||
+                    key.startsWith("OpenRijTest_") || key.startsWith("OpenNewtonJsonTest_") } || UnlockEngine.recognizesPrefs(file.bytes)
+            }.getOrDefault(false)
+        }
+        require(data.size + prefs.size <= 128) { "文件数量超过当前支持范围" }
+        val payload = BackupPayload(packageName, user, data + prefs)
+        BackupArchive.validate(payload)
+        return SaveSnapshot(packageName, user, prefs.firstOrNull(), null, data + prefs.drop(1))
+    }
 
     final override fun scan(packageName: String, user: Int) = SaveScanner.scan(this, packageName, user)
     final override fun refresh(target: PinnedSaveTarget) = SaveScanner.refresh(this, target)

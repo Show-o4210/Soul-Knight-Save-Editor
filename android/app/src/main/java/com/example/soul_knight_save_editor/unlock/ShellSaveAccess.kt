@@ -5,7 +5,7 @@ import java.util.UUID
 
 /** Fixed privileged file operations, shared by both backends; no public command execution. */
 open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: AccessBackend) : BaseSaveAccess(backend) {
-    private val pathPattern = SaveLayout.editablePath
+    private val pathPattern = SaveLayout.restorablePath
     private val backupPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+\\.data$")
     private val directoryPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+(?:/(?:files(?:/[a-zA-Z0-9_.-]+)?|shared_prefs))?$")
     private var identity = "未检查"

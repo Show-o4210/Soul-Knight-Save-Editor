@@ -100,7 +100,8 @@ class ShizukuTransportTest {
         assertThrows(IllegalArgumentException::class.java) { ShizukuWire.target("com.target;id", 0) }
         assertThrows(IllegalArgumentException::class.java) { ShizukuWire.target("com.target", -1) }
         assertThrows(IllegalArgumentException::class.java) { ShizukuWire.path("/data/user/0/com.target/files/../../secret") }
-        assertThrows(IllegalArgumentException::class.java) { ShizukuWire.path("/data/user/0/com.target/files/other.data") }
+        ShizukuWire.path("/data/user/0/com.target/files/other.data") // Opaque backup shards can be restored.
+        assertThrows(IllegalArgumentException::class.java) { ShizukuWire.path("/data/user/0/com.target/files/other.data.new") }
         ShizukuWire.path("/data/user/0/com.target/files/other.data", true)
         val unsafe = SaveFile("/data/user/0/com.target/files/game.data", byteArrayOf(), "0:0", "777", "label;id")
         assertThrows(IllegalArgumentException::class.java) { ShizukuWire.file(ShizukuWire.metadata(unsafe), byteArrayOf()) }

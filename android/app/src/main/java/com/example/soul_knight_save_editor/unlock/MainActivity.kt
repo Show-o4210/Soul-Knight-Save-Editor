@@ -18,6 +18,15 @@ class MainActivity : ComponentActivity() {
         }
         // Browse via the system directory UI; returning must never change the destination or import data.
         val folderBrowser = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+        val backupPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let(model::importBackup)
+        }
+        val freeFolderPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) result.data?.data?.let(model::freeFolder)
+        }
+        val freeFilePicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isNotEmpty()) model.freeImport(uris)
+        }
         fun chooseFolder() {
             runCatching {
                 folderPicker.launch(BackupDestination.pickerIntent(model.state.folder?.let(android.net.Uri::parse)))
@@ -39,7 +48,23 @@ class MainActivity : ComponentActivity() {
                     openFolder()
                 }
             }
-            AssistantApp(model, ::chooseFolder, ::openFolder)
+            LaunchedEffect(state.freeOpenRequest) {
+                state.freeOpenRequest?.let { uri ->
+                    model.consumedFreeOpen()
+                    runCatching { startActivity(FreeEditDocuments.chooser(android.net.Uri.parse(uri), state.freeOpenDirectory, state.freeOpenMime,
+                        state.freeOpenDocuments.map(android.net.Uri::parse))) }
+                        .onFailure { model.notice("文件已导出。未能打开应用选择器，请安装能处理该目录或文件的应用，或改用“选择文件导入”。") }
+                }
+            }
+            AssistantApp(model, ::chooseFolder, ::openFolder, {
+                runCatching { backupPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
+                    .onFailure { model.notice("无法打开备份文件选择器，请检查系统文件管理器。") }
+            }, {
+                runCatching { freeFolderPicker.launch(BackupDestination.pickerIntent(model.state.freeFolder?.let(android.net.Uri::parse))) }
+                    .onFailure { model.notice("无法打开自由编辑目录选择器。") }
+            }, {
+                runCatching { freeFilePicker.launch(arrayOf("*/*")) }.onFailure { model.notice("无法打开文件选择器。") }
+            })
         }
     }
 }

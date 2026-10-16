@@ -11,7 +11,7 @@ import java.util.zip.ZipOutputStream
 data class BackupPayload(val packageName: String, val user: Int, val files: List<SaveFile>, val kind: String = "local-save")
 data class BackupInfo(val file: File, val packageName: String, val kind: String, val createdAt: Long, val count: Int)
 
-/** Export only. Archives are never imported or deployed to an account by this component. */
+/** Bounded local archive format. Restore destinations always come from validated relative paths. */
 object BackupArchive {
     const val MAX_TOTAL_BYTES = 64 * 1024 * 1024
     private val relativePath = Regex("^(files/(?:[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.-]+\\.data|shared_prefs/[A-Za-z0-9_.-]+\\.xml)$")
@@ -24,14 +24,19 @@ object BackupArchive {
         return path
     }
 
-    fun create(directory: File, payload: BackupPayload): BackupInfo {
-        require(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$").matches(payload.packageName) && payload.user >= 0)
+    fun validate(payload: BackupPayload) {
+        require(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$").matches(payload.packageName) && payload.user in 0..100000)
         require(payload.kind in setOf("local-save", "pre-change"))
         require(payload.files.size in 1..128)
-        require(payload.files.all { it.bytes.size <= UnlockEngine.MAX_BYTES }) { "单个文件超过当前备份大小限制" }
+        require(payload.files.all { it.bytes.size in 1..UnlockEngine.MAX_BYTES }) { "单个文件为空或超过当前备份大小限制" }
         require(payload.files.sumOf { it.bytes.size.toLong() } <= MAX_TOTAL_BYTES)
         val paths = payload.files.map { relative(payload, it) }
         require(paths.distinct().size == paths.size) { "备份路径重复" }
+    }
+
+    fun create(directory: File, payload: BackupPayload): BackupInfo {
+        validate(payload)
+        val paths = payload.files.map { relative(payload, it) }
         require(directory.isDirectory || directory.mkdirs())
         val now = System.currentTimeMillis()
         val name = "soul-save-$now-${UUID.randomUUID().toString().take(8)}.zip"
@@ -87,6 +92,9 @@ object BackupArchive {
         }
         val metadata = requireNotNull(manifest) { "备份缺少校验清单" }
         require(metadata["schema"]?.jsonPrimitive?.int == 1)
+        require(SaveLayout.packagePattern.matches(metadata.getValue("package").jsonPrimitive.content))
+        require(metadata.getValue("user").jsonPrimitive.int in 0..100000)
+        require(metadata.getValue("kind").jsonPrimitive.content in setOf("local-save", "pre-change"))
         val expected = metadata.getValue("files").jsonArray
         require(expected.isNotEmpty() && expected.size == actual.size)
         val paths = expected.map { it.jsonObject.getValue("path").jsonPrimitive.content }
@@ -97,6 +105,24 @@ object BackupArchive {
         }
         return BackupInfo(file, metadata.getValue("package").jsonPrimitive.content, metadata.getValue("kind").jsonPrimitive.content,
             metadata.getValue("createdAt").jsonPrimitive.long, expected.size)
+    }
+
+    fun read(file: File): BackupPayload {
+        verify(file)
+        java.util.zip.ZipFile(file).use { zip ->
+            val metadata = Json.parseToJsonElement(zip.getInputStream(zip.getEntry("manifest.json")).use { it.reader(Charsets.UTF_8).readText() }).jsonObject
+            val pkg = metadata.getValue("package").jsonPrimitive.content
+            val user = metadata.getValue("user").jsonPrimitive.int
+            val files = metadata.getValue("files").jsonArray.map { item ->
+                val entry = item.jsonObject
+                val path = entry.getValue("path").jsonPrimitive.content
+                val bytes = zip.getInputStream(zip.getEntry("payload/$path")).use { it.readBytes() }
+                require(UnlockEngine.sha(bytes) == entry.getValue("sha256").jsonPrimitive.content) { "备份在读取期间发生变化" }
+                SaveFile("/data/user/$user/$pkg/$path", bytes, entry.getValue("owner").jsonPrimitive.content,
+                    entry.getValue("mode").jsonPrimitive.content, entry.getValue("context").jsonPrimitive.content)
+            }
+            return BackupPayload(pkg, user, files, metadata.getValue("kind").jsonPrimitive.content).also(::validate)
+        }
     }
     fun list(directory: File): List<BackupInfo> = directory.listFiles().orEmpty().filter { it.isFile && it.extension == "zip" }
         .mapNotNull { runCatching { verify(it) }.getOrNull() }.sortedByDescending { it.createdAt }

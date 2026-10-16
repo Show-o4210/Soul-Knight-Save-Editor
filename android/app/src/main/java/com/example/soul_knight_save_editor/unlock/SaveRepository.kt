@@ -57,6 +57,17 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     fun exportable(packageName: String? = null): List<String> = records().filter {
         packageName == null || manifest(it)["package"]?.jsonPrimitive?.content == packageName
     }.map { it.name }
+    fun history(): List<BackupRecord> = records().filter { stateOf(it) in setOf("complete", "rolled_back", "restored") }.map {
+        val data = manifest(it)
+        BackupRecord("transaction:${it.name}", data.getValue("package").jsonPrimitive.content,
+            it.name.substringBefore('-').toLong(), data.getValue("entries").jsonArray.size, "pre-change")
+    }
+    @Synchronized fun delete(id: String) {
+        val record = folder(id)
+        require(stateOf(record) in setOf("complete", "rolled_back", "restored")) { "不能清理未完成事务" }
+        require(record.canonicalFile.parentFile == directory.canonicalFile)
+        check(record.deleteRecursively()) { "无法删除旧备份" }
+    }
     @Synchronized fun originals(id: String): BackupPayload {
         val folder = folder(id)
         val metadata = manifest(folder)
@@ -85,7 +96,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         return commit(snapshot, originals + plan.outputs)
     }
 
-    private fun commit(snapshot: SaveSnapshot, proposed: Map<String, ByteArray>): String {
+    private fun commit(snapshot: SaveSnapshot, proposed: Map<String, ByteArray>, restoring: Boolean = false): String {
         device.stop(snapshot.packageName, snapshot.user)
         // Recheck every captured file, even an unchanged mirror, after stopping the game.
         snapshot.files.forEach { require(same(it, device.read(it.path))) { "存档已在扫描后变化；请重新扫描，不覆盖新进度" } }
@@ -93,7 +104,11 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         require(changed.isNotEmpty()) { "所选内容没有需要写回的变化" }
         val id = "${System.currentTimeMillis()}-${UUID.randomUUID()}"
         val folder = File(directory, id).apply { check(mkdir()) }
-        val entries = changed.mapIndexed { index, original ->
+        // Preserve reading preferences even when this edit did not change them. A future restore
+        // must be able to reset the flags after the game has enabled them again.
+        val captured = if (restoring) snapshot.files else
+            (changed + snapshot.files.filter { it.path.contains("/shared_prefs/") }).distinctBy { it.path }
+        val entries = captured.mapIndexed { index, original ->
             val after = proposed.getValue(original.path)
             writeBytes(File(folder, "$index.before"), original.bytes)
             writeBytes(File(folder, "$index.after"), after)
@@ -177,12 +192,46 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         status(folder, "rolled_back")
     }
 
-    /** Exact rollback only; does not overwrite progress made after the original operation. */
+    /** User-selected restore is a NEW transaction; crash recovery still performs an exact rollback. */
     @Synchronized fun restore(id: String) {
         require(pending().isEmpty()) { "请先恢复未完成事务" }
-        val folder = folder(id)
-        require(stateOf(folder) == "complete") { "该备份不是可恢复的已完成事务" }
-        recover(id)
-        status(folder, "restored")
+        val record = folder(id)
+        require(stateOf(record) in setOf("complete", "rolled_back", "restored")) { "请先恢复未完成事务" }
+        val payload = originals(id)
+        val prefsPath = manifest(record)["prefsPath"]?.jsonPrimitive?.content
+        restore(payload, prefsPath)
+    }
+
+    @Synchronized fun restore(payload: BackupPayload, fallbackPrefsPath: String? = null) {
+        require(pending().isEmpty()) { "请先恢复未完成事务" }
+        BackupArchive.validate(payload)
+        val fallback = fallbackPrefsPath?.takeIf { path -> payload.files.none { it.path.contains("/shared_prefs/") } }
+        if (fallback != null) {
+            require(fallback.contains("/shared_prefs/"))
+            BackupArchive.validate(payload.copy(files = payload.files + SaveFile(fallback, byteArrayOf(1), "", "", "")))
+        }
+        device.assertIdleForRecovery()
+        device.stop(payload.packageName, payload.user)
+        val files = payload.files + listOfNotNull(fallback?.let(device::read))
+        val shardAccounts = payload.files.mapNotNull { EditEngine.itemAccount(it.path) ?: EditEngine.statisticAccount(it.path) }.distinct()
+        val proposed = files.associate { source ->
+            var bytes = source.bytes
+            if (source.path.contains("/shared_prefs/")) {
+                val nodes = UnlockEngine.prefs(bytes)
+                val flag = Regex("^(?:OpenRijTest|OpenNewtonJsonTest)(?:_(${SaveAccountId.TOKEN_PATTERN}))?$")
+                // The whole backed-up XML is restored. A fallback XML, however, is current data:
+                // only change flags for the accounts explicitly identified by restored shards.
+                val accounts = if (source.path == fallback) shardAccounts else
+                    nodes.keys.mapNotNull { flag.matchEntire(it)?.groupValues?.get(1) }.distinct()
+                accounts.forEach {
+                    bytes = UnlockEngine.localReadingFlags(bytes, it).first
+                }
+            }
+            source.path to bytes
+        }
+        // Use live ownership/labels, rather than restoring stale application UIDs from the ZIP.
+        val current = files.map { device.read(it.path) }
+        if (current.all { it.bytes.contentEquals(proposed.getValue(it.path)) }) return
+        commit(SaveSnapshot(payload.packageName, payload.user, null, null, current), proposed, restoring = true)
     }
 }

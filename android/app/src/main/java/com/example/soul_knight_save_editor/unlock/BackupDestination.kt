@@ -21,12 +21,12 @@ object BackupDestination {
     }
     fun document(uri: Uri): Uri { validate(uri); return DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri)) }
     fun label(uri: Uri): String = runCatching { DocumentsContract.getTreeDocumentId(uri).replace("primary:", "内部存储 / ") }.getOrDefault("已选择本地目录")
-    fun write(context: Context, tree: Uri, source: File): Uri {
+    fun write(context: Context, tree: Uri, source: File, name: String = source.name): Uri {
         validate(tree)
         BackupArchive.verify(source)
         val resolver = context.contentResolver
         require(resolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission && it.isWritePermission }) { "备份文件夹授权已失效，请重新选择；应用内副本仍保留" }
-        val created = DocumentsContract.createDocument(resolver, document(tree), "application/zip", source.name)
+        val created = DocumentsContract.createDocument(resolver, document(tree), "application/zip", name)
             ?: error("无法创建备份文件，请重新选择可写文件夹")
         try {
             resolver.openOutputStream(created, "w")?.use { output -> source.inputStream().use { it.copyTo(output) } }

@@ -24,12 +24,12 @@ class SaveRepositoryTest {
         }
     }
     private fun snapshot(device: Device): SaveSnapshot {
-        val prefs = SaveFile("/data/user/0/com.test.game/shared_prefs/game.xml", "prefs-before".toByteArray(), "10100:10100", "600", "u:object_r:app_data_file:s0")
+        val prefs = SaveFile("/data/user/0/com.test.game/shared_prefs/game.xml", "<map><string name=\"test\">before</string></map>".toByteArray(), "10100:10100", "600", "u:object_r:app_data_file:s0")
         val game = prefs.copy(path = "/data/user/0/com.test.game/files/game.data", bytes = "game-before".toByteArray())
         device.files[prefs.path] = prefs; device.files[game.path] = game
         return SaveSnapshot("com.test.game", 0, prefs, game)
     }
-    private fun patch() = UnlockPatch("game-after".toByteArray(), "prefs-after".toByteArray(), listOf("test"))
+    private fun patch() = UnlockPatch("game-after".toByteArray(), "<map><string name=\"test\">after</string></map>".toByteArray(), listOf("test"))
     @Test fun fourthFileFailureRestoresCharacterItemAndWeaponChangesTogether() {
         val device = Device()
         val base = snapshot(device)
@@ -164,15 +164,15 @@ class SaveRepositoryTest {
         snapshot.files.forEach { assertArrayEquals(it.bytes, device.read(it.path).bytes) }
         assertTrue(restarted.pending().isEmpty())
     }
-    @Test fun restoreDoesNotOverwritePostGameProgress() {
+    @Test fun manualRestoreOverwritesPostGameProgressAndBacksItUpFirst() {
         val device = Device(); val snapshot = snapshot(device)
         val repository = SaveRepository(temp.newFolder(), device)
         val id = repository.apply(snapshot, patch())
         device.files[snapshot.prefs!!.path] = snapshot.prefs.copy(bytes = "new progress".toByteArray())
-        val attempts = device.attempts
-        assertThrows(IllegalArgumentException::class.java) { repository.restore(id) }
-        assertEquals(attempts, device.attempts)
-        assertEquals("new progress", String(device.read(snapshot.prefs.path).bytes))
+        repository.restore(id)
+        assertArrayEquals(snapshot.prefs.bytes, device.read(snapshot.prefs.path).bytes)
+        val undo = repository.completed().single { it != id }
+        assertEquals("new progress", String(repository.originals(undo).files.single { it.path == snapshot.prefs.path }.bytes))
     }
     @Test fun pendingJournalBlocksNewWrites() {
         val device = Device(); val snapshot = snapshot(device); device.dieAt = 1
@@ -187,7 +187,7 @@ class SaveRepositoryTest {
         val id = repository.apply(snapshot, patch())
         java.io.File(directory, "$id/0.before").writeText("tampered")
         assertThrows(IllegalArgumentException::class.java) { repository.restore(id) }
-        assertEquals("prefs-after", String(device.read(snapshot.prefs!!.path).bytes))
+        assertArrayEquals(patch().prefs, device.read(snapshot.prefs!!.path).bytes)
     }
     @Test fun xmlOnlyTransactionsWork() {
         val device = Device(); val snapshot = snapshot(device).copy(game = null)

@@ -34,7 +34,7 @@ import kotlin.math.abs
     val height by animateDpAsState(if (compact) 40.dp else 72.dp, spring(stiffness = 500f), label = "header-height")
     val logo by animateDpAsState(if (compact) 24.dp else 44.dp, label = "header-logo")
     val font by animateFloatAsState(if (compact) 16f else 22f, label = "header-title")
-    val modeText = when (mode) { AssistantMode.QUICK -> "快速模式"; AssistantMode.EXPERT -> "专家模式"; null -> "" }
+    val modeText = mode?.label.orEmpty()
     Surface(onClick = onTitleClick, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp).height(height).testTag("app-header"),
         shape = RoundedCornerShape(if (compact) 20.dp else 24.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = .65f), contentColor = MaterialTheme.colorScheme.onSurface,

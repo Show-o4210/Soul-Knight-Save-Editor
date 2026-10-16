@@ -14,7 +14,7 @@ import kotlinx.serialization.json.JsonObject
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-enum class AssistantMode { QUICK, EXPERT }
+enum class AssistantMode(val label: String) { QUICK("快速模式"), EXPERT("专家模式"), FREE("自由编辑") }
 enum class AssistantPage { WORKSPACE, BACKUPS, SETTINGS }
 data class ModeChoices(val quickRoles: Boolean = false, val quickSkins: Boolean = false,
     val quickLevels: Boolean = false, val quickSkills: Boolean = false, val quickPets: Boolean = false,
@@ -22,6 +22,7 @@ data class ModeChoices(val quickRoles: Boolean = false, val quickSkins: Boolean 
     val expert: UnlockSelection = UnlockSelection()) {
     fun weapons(mode: AssistantMode) = mode == AssistantMode.QUICK && quickWeapons
     fun selection(mode: AssistantMode, catalog: Catalog): UnlockSelection = when (mode) {
+        AssistantMode.FREE -> UnlockSelection()
         AssistantMode.EXPERT -> expert
         AssistantMode.QUICK -> UnlockSelection(
             if (quickRoles) catalog.heroes.filter { it.unlocked != null }.map { it.index }.toSet() else emptySet(),
@@ -79,9 +80,24 @@ data class AssistantState(
     val backups: List<String> = emptyList(),
     val originalBackups: List<String> = emptyList(),
     val archives: List<BackupInfo> = emptyList(),
+    val backupRecords: List<BackupRecord> = emptyList(),
+    val backupNames: Map<String, String> = emptyMap(),
+    val backupLimit: Int = 0,
     val folder: String? = null,
     val autoOpenFolder: Boolean = true,
-    val openFolderRequest: String? = null
+    val openFolderRequest: String? = null,
+    val freeFolder: String? = null,
+    val freeSnapshot: SaveSnapshot? = null,
+    val freeSources: List<FreeSource> = emptyList(),
+    val freeSelected: Set<String> = emptySet(),
+    val freeAccounts: List<String> = emptyList(),
+    val freeAccount: String? = null,
+    val freeSession: FreeEditSession? = null,
+    val freeReview: FreeImportReview? = null,
+    val freeOpenRequest: String? = null,
+    val freeOpenDirectory: Boolean = true,
+    val freeOpenMime: String = "text/plain",
+    val freeOpenDocuments: List<String> = emptyList()
 )
 
 fun AssistantState.navigate(target: AssistantPage): AssistantState = copy(
@@ -125,6 +141,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private val archiveDirectory = File(application.filesDir, "export-backups-v1")
+    private val backupCatalog = BackupCatalog(File(application.filesDir, "backup-labels-v1.jsonl"))
+    private val freeStore = FreeEditStore(File(application.filesDir, "free-edit-sessions-v1"))
     private val searchCancelled = AtomicBoolean(false)
     var state by mutableStateOf(AssistantState(
         accessBackend = device.backend,
@@ -134,11 +152,48 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         personalUseAccepted = settings.getBoolean("personalUseAcceptedV1", false),
         consentPromptVisible = !settings.getBoolean("personalUseAcceptedV1", false),
         folder = settings.getString("folder", null), autoOpenFolder = settings.getBoolean("autoOpenFolder", true),
+        backupLimit = settings.getInt("backupLimit", 0).coerceAtLeast(0),
+        freeFolder = settings.getString("freeFolder", null),
         pending = repository.pending(), pendingPackages = repository.pending().associateWith(repository::packageName),
         backups = repository.completed(settings.getString("package", "com.ChillyRoom.DungeonShooter")),
         originalBackups = repository.exportable(settings.getString("package", "com.ChillyRoom.DungeonShooter"))))
         private set
-    init { viewModelScope.launch { state = state.copy(archives = withContext(Dispatchers.IO) { BackupArchive.list(archiveDirectory) }) } }
+    init { work {
+        refreshBackups()
+        if (state.mode == AssistantMode.FREE) state = state.copy(workspaceTab = WorkspaceTabs.free.id)
+        if (state.mode == AssistantMode.FREE) settings.getString("freeSession", null)?.let { id ->
+            val session = withContext(Dispatchers.IO) { runCatching { freeStore.load(id) } }
+            if (session.isSuccess && session.getOrThrow().snapshot.packageName == state.packageName)
+                state = state.copy(freeSession = session.getOrThrow())
+            else if (session.isFailure) state = state.copy(message = "上次自由编辑记录无法读取：${session.exceptionOrNull()?.message}")
+        }
+    } }
+
+    private suspend fun refreshBackups(prune: Boolean = false) {
+        val result = withContext(Dispatchers.IO) {
+            fun collectRecords(archives: List<BackupInfo>) = repository.history() + archives.map {
+                BackupRecord("archive:${it.file.name}", it.packageName, it.createdAt, it.count, it.kind)
+            }
+            var archives = BackupArchive.list(archiveDirectory)
+            var records = collectRecords(archives)
+            // Allocate labels before pruning so the sequence never moves backwards.
+            backupCatalog.names(records)
+            if (prune && repository.pending().isEmpty()) {
+                BackupCatalog.excess(records, state.backupLimit).forEach { record ->
+                    if (record.key.startsWith("transaction:")) repository.delete(record.key.removePrefix("transaction:"))
+                    else {
+                        val file = archives.single { "archive:${it.file.name}" == record.key }.file
+                        require(file.canonicalFile.parentFile == archiveDirectory.canonicalFile)
+                        check(file.delete()) { "无法删除旧备份" }
+                    }
+                }
+                archives = BackupArchive.list(archiveDirectory)
+                records = collectRecords(archives)
+            }
+            Triple(archives, records.sortedByDescending { it.createdAt }, backupCatalog.names(records))
+        }
+        state = state.copy(archives = result.first, backupRecords = result.second, backupNames = result.third)
+    }
 
     private fun work(onFailure: ((Exception) -> Unit)? = null, block: suspend () -> Unit) {
         if (state.busy) return
@@ -147,7 +202,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         var failureDiagnostic: String? = null
         state = state.copy(busy = true, preview = null, previewMode = null)
         viewModelScope.launch {
-            try { block() } catch (error: Exception) {
+            var succeeded = false
+            try { block(); succeeded = true } catch (error: Exception) {
                 failureDiagnostic = generateSequence<Throwable>(error) { it.cause }
                     .filterIsInstance<AccessFailure>().firstOrNull { it.diagnostic != null }?.diagnostic?.let {
                         it.copy(packageName = it.packageName ?: state.packageName,
@@ -165,11 +221,12 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                     operationDevice.statusString + if (state.snapshot != null && operationDevice.connected) "；当前目标目录及存档读取通过。" else "；目标目录尚未通过本次读取验证。"
                 } else state.accessStatus
                 withContext(Dispatchers.IO) { operationDevice.close() }
-                val archives = withContext(Dispatchers.IO) { BackupArchive.list(archiveDirectory) }
+                try { refreshBackups(prune = succeeded) }
+                catch (error: Exception) { state = state.copy(message = state.message + "\n备份列表／保留上限处理未完成：${error.message}") }
                 state = state.copy(busy = false, discovering = false, pending = operationRepository.pending(),
                     accessStatus = accessStatus, accessDiagnostic = diagnostic.ifEmpty { state.accessDiagnostic },
                     pendingPackages = operationRepository.pending().associateWith(operationRepository::packageName),
-                    backups = operationRepository.completed(state.packageName), originalBackups = operationRepository.exportable(state.packageName), archives = archives)
+                    backups = operationRepository.completed(state.packageName), originalBackups = operationRepository.exportable(state.packageName))
             }
         }
     }
@@ -216,7 +273,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         if (state.busy) return
         settings.edit().apply { if (state.rememberMode) putString("mode", mode.name) else remove("mode") }.apply()
         state = state.copy(mode = mode, page = AssistantPage.WORKSPACE, settingsReturnPage = AssistantPage.WORKSPACE,
-            workspaceTab = if (state.snapshot == null) WorkspaceTabs.saves.id else state.workspaceTab,
+            workspaceTab = if (mode == AssistantMode.FREE) WorkspaceTabs.free.id else if (state.snapshot == null || state.workspaceTab == WorkspaceTabs.free.id) WorkspaceTabs.saves.id else state.workspaceTab,
             preview = null, previewMode = null)
     }
     fun rememberMode(value: Boolean) {
@@ -408,13 +465,20 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun apply() {
         if (!state.personalUseAccepted) { state = state.copy(preview = null, previewMode = null, message = "请先确认仅用于自己的本地存档"); return }
         val patch = state.preview ?: return
-        val snapshot = state.snapshot ?: return
+        val snapshot = (if (state.previewMode == AssistantMode.FREE) state.freeSession?.snapshot else state.snapshot) ?: return
         if (state.previewMode != state.mode) { dismiss(); return }
         work(onFailure = { error ->
             state = state.copy(applyOutcome = ApplyOutcome(false, snapshot.packageName, 0,
                 emptyList(), listOf(error.message ?: "写回未完成；请查看备份状态")))
         }) {
             withContext(Dispatchers.IO) { repository.apply(snapshot, patch) }
+            if (state.previewMode == AssistantMode.FREE || state.mode == AssistantMode.FREE) {
+                settings.edit().remove("freeSession").apply()
+                state = state.clearLoaded("自由编辑已写回。继续修改时请重新读取并导出。", clearTarget = true).copy(
+                    freeSession = null, freeReview = null, freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(),
+                    applyOutcome = ApplyOutcome(true, snapshot.packageName, patch.outputs.size, patch.changes, emptyList()))
+                return@work
+            }
             val refreshed = refreshAfterWrite()
             state = state.copy(page = AssistantPage.WORKSPACE,
                 applyOutcome = ApplyOutcome(true, snapshot.packageName, patch.outputs.size, patch.changes.toList(), emptyList()),
@@ -429,6 +493,60 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             if (refreshed) state = state.copy(message = "已恢复，存档已刷新，可以继续编辑。")
         } else state = state.clearLoaded("已恢复原存档。")
     }
+    fun restoreBackup(key: String) = work {
+        val record = state.backupRecords.singleOrNull { it.key == key } ?: error("备份不存在，请刷新列表")
+        require(record.packageName == state.packageName) { "请先选择备份对应的游戏版本" }
+        withContext(Dispatchers.IO) {
+            val user = android.os.Process.myUid() / 100000
+            if (key.startsWith("transaction:")) {
+                val id = key.removePrefix("transaction:")
+                require(repository.originals(id).user == user) { "备份属于其他 Android 用户，不能直接还原" }
+                repository.restore(id)
+            } else {
+                val info = state.archives.single { "archive:${it.file.name}" == key }
+                require(info.file.canonicalFile.parentFile == archiveDirectory.canonicalFile)
+                val payload = BackupArchive.read(info.file)
+                require(payload.packageName == state.packageName && payload.user == user) { "备份与当前游戏或 Android 用户不一致" }
+                val fallback = if (payload.files.none { it.path.contains("/shared_prefs/") }) device.scan(payload.packageName, payload.user).prefs?.path else null
+                repository.restore(payload, fallback)
+            }
+        }
+        state = state.clearLoaded("存档已还原，已有读取开关已设为 0。请重新读取存档。", clearTarget = true)
+    }
+    fun renameBackup(key: String, name: String) = work {
+        require(state.backupRecords.any { it.key == key }) { "备份不存在" }
+        withContext(Dispatchers.IO) { backupCatalog.rename(key, name) }
+        state = state.copy(message = "备份已重命名。")
+    }
+    fun backupLimit(value: String) = work {
+        val limit = value.trim().ifEmpty { "0" }.toIntOrNull()
+        require(limit != null && limit >= 0) { "请输入大于 0 的保留数量；0 或留空表示不限" }
+        check(settings.edit().putInt("backupLimit", limit).commit()) { "无法保存保留上限" }
+        state = state.copy(backupLimit = limit, message = if (limit == 0) "备份保留数量不限。" else "每个游戏最多保留 $limit 份备份，超出的最旧备份将删除。")
+    }
+    fun importBackup(uri: Uri) = work {
+        require(state.pending.isEmpty()) { "请先恢复未完成事务" }
+        val temporary = File(getApplication<Application>().cacheDir, "backup-import-${java.util.UUID.randomUUID()}.zip")
+        try {
+            val payload = withContext(Dispatchers.IO) {
+                getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                    temporary.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        var total = 0L
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            total += n
+                            require(total <= BackupArchive.MAX_TOTAL_BYTES + 1024 * 1024) { "备份包过大" }
+                            output.write(buffer, 0, n)
+                        }
+                    }
+                } ?: error("无法读取所选备份包")
+                BackupArchive.read(temporary).also { BackupArchive.create(archiveDirectory, it) }
+            }
+            state = state.copy(message = "备份包已导入（${payload.packageName}）。选择对应游戏后，可在列表中还原。")
+        } finally { withContext(Dispatchers.IO) { temporary.delete() } }
+    }
     fun folder(uri: Uri) {
         runCatching { BackupDestination.remember(getApplication(), uri) }.onSuccess {
             settings.edit().putString("folder", uri.toString()).apply()
@@ -436,26 +554,114 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         }.onFailure { notice(it.message ?: "无法保存目录授权，请重新选择本地文件夹") }
     }
     fun autoOpen(value: Boolean) { settings.edit().putBoolean("autoOpenFolder", value).apply(); state = state.copy(autoOpenFolder = value) }
+    fun freeFolder(uri: Uri) {
+        if (state.busy) return
+        runCatching { BackupDestination.remember(getApplication(), uri) }.onSuccess {
+            settings.edit().putString("freeFolder", uri.toString()).apply()
+            state = state.copy(freeFolder = uri.toString(), message = "自由编辑导出目录已保存。")
+        }.onFailure { notice(it.message ?: "目录授权失败") }
+    }
+    fun freeScan() = work {
+        require(state.pending.isEmpty()) { "请先恢复未完成事务" }
+        val snapshot = withContext(Dispatchers.IO) { device.freeSnapshot(state.packageName, android.os.Process.myUid() / 100000) }
+        val sources = withContext(Dispatchers.Default) { snapshot.files.filter { it.path.endsWith(".data") }.map { FreeSource(it.path, FreeEditEngine.detect(it)) } }
+        val accounts = withContext(Dispatchers.Default) { FreeEditEngine.accounts(snapshot) }
+        state = state.copy(freeSnapshot = snapshot, freeSources = sources, freeSelected = emptySet(), freeAccounts = accounts,
+            freeAccount = accounts.singleOrNull(), freeReview = null,
+            accessStatus = "${device.backend.label}：自由编辑文件读取通过。", message = "已找到 ${sources.size} 个 .data 文件，请选择要导出的文件。")
+    }
+    fun freeSelect(path: String, selected: Boolean) {
+        if (!state.busy && state.freeSources.any { it.path == path }) state = state.copy(
+            freeSelected = if (selected) state.freeSelected + path else state.freeSelected - path, preview = null, previewMode = null)
+    }
+    fun freeAccount(account: String) {
+        if (!state.busy && account in state.freeAccounts) state = state.copy(freeAccount = account)
+    }
+    fun freeExport() = work {
+        require(state.pending.isEmpty()) { "请先恢复未完成事务" }
+        val folder = requireNotNull(state.freeFolder) { "请先选择自由编辑的导出目录" }
+        val selected = state.freeSelected.toSet()
+        require(selected.isNotEmpty()) { "请先选择 .data 文件" }
+        val exported = withContext(Dispatchers.IO) {
+            val snapshot = device.freeSnapshot(state.packageName, android.os.Process.myUid() / 100000)
+            val directory = FreeEditDocuments.createDirectory(getApplication(), Uri.parse(folder))
+            val exported = FreeEditEngine.create(snapshot, selected, state.freeAccount, directory.toString())
+            val documents = FreeEditDocuments.write(getApplication(), directory, exported.second)
+            freeStore.save(exported.first)
+            check(settings.edit().putString("freeSession", exported.first.id).commit()) { "无法保存导出记录" }
+            exported.first to documents
+        }
+        val session = exported.first
+        state = state.copy(freeSession = session, freeReview = null, freeOpenRequest = session.directory, freeOpenDirectory = true,
+            freeOpenDocuments = exported.second.map(Uri::toString),
+            message = "已导出 ${session.entries.size} 个文件，请选择应用打开目录并编辑；完成后返回导入。")
+    }
+    fun freeImport(uris: List<Uri>? = null) = work {
+        val session = requireNotNull(state.freeSession) { "请先导出解码文件" }
+        require(session.snapshot.packageName == state.packageName && session.snapshot.user == android.os.Process.myUid() / 100000) { "导出记录与当前游戏或 Android 用户不一致" }
+        val review = withContext(Dispatchers.IO) {
+            val read = if (uris == null) FreeEditDocuments.readDirectory(getApplication(), Uri.parse(session.directory))
+                else FreeEditDocuments.readUris(getApplication(), uris)
+            FreeEditEngine.match(session, read.documents).let { it.copy(ignored = read.ignored + it.ignored) }
+        }
+        state = state.copy(freeReview = review, message = "导入比较完成：${review.changed} 份内容变化，${review.unresolved} 份待选择，${review.ignored.size} 个多余文件已忽略。")
+    }
+    fun freeChoose(path: String, id: String?) {
+        if (!state.busy) state = state.copy(freeReview = state.freeReview?.select(path, id), preview = null, previewMode = null)
+    }
+    fun freePreview() = work {
+        require(state.mode == AssistantMode.FREE && state.personalUseAccepted) { "请先确认个人使用约定" }
+        require(state.pending.isEmpty()) { "请先恢复未完成事务" }
+        val session = requireNotNull(state.freeSession)
+        require(session.snapshot.packageName == state.packageName) { "请切换到导出记录对应的游戏" }
+        val plan = withContext(Dispatchers.Default) { FreeEditEngine.plan(session, requireNotNull(state.freeReview) { "请先导入修改后的文件" }) }
+        if (plan.outputs.isEmpty()) state = state.copy(message = "没有需要重新打包写回的内容变化。")
+        else state = state.copy(preview = plan, previewMode = AssistantMode.FREE)
+    }
+    fun freeOpenDirectory() = work {
+        val session = requireNotNull(state.freeSession)
+        val documents = withContext(Dispatchers.IO) { FreeEditDocuments.children(getApplication(), Uri.parse(session.directory)) }
+        state = state.copy(freeOpenRequest = session.directory, freeOpenDirectory = true, freeOpenDocuments = documents.map(Uri::toString))
+    }
+    fun freeOpenFile(entry: FreeEditEntry) = work {
+        val session = requireNotNull(state.freeSession)
+        require(entry in session.entries)
+        val uri = withContext(Dispatchers.IO) { FreeEditDocuments.find(getApplication(), Uri.parse(session.directory), entry.name) }
+        state = state.copy(freeOpenRequest = uri.toString(), freeOpenDirectory = false, freeOpenDocuments = emptyList(),
+            freeOpenMime = if (entry.codec == FreeCodec.RAW) "application/octet-stream" else "text/plain")
+    }
+    fun consumedFreeOpen() { state = state.copy(freeOpenRequest = null, freeOpenDocuments = emptyList()) }
+    fun canResumeFree() = settings.contains("freeSession")
+    fun freeResume() = work {
+        val id = requireNotNull(settings.getString("freeSession", null)) { "没有可继续的导出记录" }
+        val session = withContext(Dispatchers.IO) { freeStore.load(id) }
+        require(session.snapshot.packageName == state.packageName) { "上次导出的游戏为 ${session.snapshot.packageName}，请先选择该游戏" }
+        state = state.copy(freeSession = session, freeReview = null, message = "已载入上次导出记录，可打开目录或导入修改。")
+    }
     fun consumedFolderRequest() { state = state.copy(openFolderRequest = null) }
     fun backupNow() = work {
         require(state.pending.isEmpty()) { "请先恢复未完成事务，再备份当前存档" }
-        val tree = requireNotNull(state.folder) { "请先选择一个本地备份文件夹" }
         state = state.copy(message = "正在关闭游戏并备份本地 .data 与 XML；不会修改存档…")
         val info = withContext(Dispatchers.IO) { BackupArchive.create(archiveDirectory, device.backup(state.packageName.trim(), android.os.Process.myUid() / 100000)) }
-        exportToFolder(info, tree)
+        refreshBackups()
+        val tree = state.folder
+        if (tree != null) exportToFolder(info, tree)
+        else state = state.copy(message = "${state.backupNames["archive:${info.file.name}"]} 已保存到应用内；可选择文件夹导出。")
     }
     fun exportOriginal(id: String) = work {
         val tree = requireNotNull(state.folder) { "请先选择本地备份文件夹" }
-        val info = withContext(Dispatchers.IO) { BackupArchive.create(archiveDirectory, repository.originals(id)) }
-        exportToFolder(info, tree)
+        val info = withContext(Dispatchers.IO) { BackupArchive.create(File(getApplication<Application>().cacheDir, "backup-exports"), repository.originals(id)) }
+        try { exportToFolder(info, tree, state.backupNames["transaction:$id"]) }
+        finally { withContext(Dispatchers.IO) { info.file.delete() } }
     }
     fun exportArchive(info: BackupInfo) = work {
         val tree = requireNotNull(state.folder) { "请先选择本地备份文件夹" }
         require(info.file.canonicalFile.parentFile == archiveDirectory.canonicalFile)
         exportToFolder(info, tree)
     }
-    private suspend fun exportToFolder(info: BackupInfo, tree: String) {
-        withContext(Dispatchers.IO) { BackupDestination.write(getApplication(), Uri.parse(tree), info.file) }
-        state = state.copy(message = "备份已导出并校验：${info.count} 个文件。${info.file.name}", openFolderRequest = if (state.autoOpenFolder) tree else null)
+    private suspend fun exportToFolder(info: BackupInfo, tree: String, label: String? = state.backupNames["archive:${info.file.name}"]) {
+        val name = "${label ?: info.file.nameWithoutExtension}.zip"
+        withContext(Dispatchers.IO) { BackupDestination.write(getApplication(), Uri.parse(tree), info.file, name) }
+        state = state.copy(message = "备份已导出并校验：${info.count} 个文件。$name", openFolderRequest = if (state.autoOpenFolder) tree else null)
     }
 }

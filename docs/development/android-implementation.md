@@ -2,7 +2,11 @@
 
 [开发文档索引](README.md) · [用户帮助](../help/README.md)
 
-当前源码基于最新正式版 **`2.0.2` / versionCode 18**，GitHub 标签为 `v2.0.2`：[下载正式 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.2/SoulKnightSaveEditor-2.0.2.apk) · [发布说明](../releases/2.0.2.md)。本版修复目录检查的 Root 错误分类，增加可显式选择的 Shizuku Root 通道；原生 Root 继续默认，旧用户无需安装 Shizuku，也不会自动请求其授权。
+当前源码为正式版 **`2.0.3` / versionCode 21**，GitHub 标签为 `v2.0.3`：[下载正式 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.3/SoulKnightSaveEditor-2.0.3.apk) · [发布说明](../releases/2.0.3.md)。增加自由编辑、ZIP 导入还原、备份重命名与保留上限，保留 2.0.2 的原生 Root／Shizuku Root 双通道。原生 Root 继续默认。
+
+开发阶段 `2.0.3-dev01` / versionCode 19（已纳入 2.0.3），增加 ZIP 导入／限定范围还原、备份重命名、递增编号与保留上限。版本号递增也使 Shizuku UserService 加载更新后的文件范围规则。还原新建独立事务，原件及其 SHA-256 不改；自动故障恢复继续按原事务检查，详情见[备份说明](../help/backup-and-update.md)。
+
+后续开发阶段 `2.0.3-dev02` / versionCode 20（已纳入 2.0.3），增加第三个自由编辑入口。`FreeEditEngine` 只负责内容编解码、来源匹配与写回计划；`FreeEditStore` 保留私有原件和不可由外部文件改变的对应关系；`FreeEditDocuments` 使用用户授权的本地 SAF 目录，目录／逐文件打开始终包装为应用选择器。自由扫描独立于角色与物品业务识别，支持已知 JSON 编码和明确标识的原始字节导入。大整数排版不经过会转换为浮点数的 JSON 序列化路径。完整流程与范围见[自由编辑说明](../help/free-editing.md)。
 
 这是需要 Root 的本地存档助手。**文件读写最近测试时间为 2026 年 10 月 9 日，存档适配基准仍为元气骑士 8.6.0。** 本次在 Pixel 6 / Android 16 上验证应用自身合成目录中的文件读写、原件备份、事务恢复及 owner、mode、SELinux context；原生 Root 和 Shizuku Root 通道测试通过。未修改真实游戏存档或验证游戏内效果，OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，**不保证实际可用**。开发候选的详细修改与测试记录见 [Root / Shizuku 验证记录](../root-shizuku-validation.md)。
 
@@ -16,7 +20,7 @@
 .\gradlew.bat testDebugUnitTest assembleDebug lintDebug
 ```
 
-Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签名。正式 Release 构建读取仓库外签名配置，步骤见[签名文档](../android-signing.md)。2.0.2 正式包可覆盖同正式签名的 2.0.0 / 2.0.1-rc01；历史 alpha 和 `2.0.2-root01` Debug 候选签名不同，不能直接覆盖。请先导出内部备份并处理未完成事务，具体见[迁移说明](../releases/2.0.0.md)。
+Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签名。正式 Release 构建读取仓库外签名配置，步骤见[签名文档](../android-signing.md)。2.0.3 正式包可覆盖同正式签名的 2.0.0 / 2.0.1-rc01 / 2.0.2；历史 alpha 和 `2.0.2-root01` Debug 候选签名不同，不能直接覆盖。请先导出内部备份并处理未完成事务，具体见[迁移说明](../releases/2.0.0.md)。
 
 ## 当前编辑范围
 
@@ -33,7 +37,7 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签�
 | 小鱼干、普通／英雄试玩券 | 三个独立非负整数输入框，留空不改 | 逐项目标数量或选中批量设置 |
 | 武器获取次数 | 统一 +8；已知编号武器缺失键补入，已有其他武器获取键也累加；默认关闭 | 名称／ID 搜索，所选单项或批量自定义增加量／+8 |
 
-编辑目标为识别出的 `game.data`、PlayerPrefs XML、`item_data_<UID>_.data` 与 `statistic_<UID>_.data`。XML 单文件模式支持角色、皮肤及已有宠物键；物品可独立修改，无需 game 或角色 XML。当前物品目录只开放 `AppVersion=80600`，不把默认分片替代 UID 分片。武器独立处理统计分片，需同账号物品分片的 80600 版本核对；其他 `.data` 可进入只读备份。预览、写前漂移检查、原件备份、写后复读、失败恢复均在应用内实现。选定账号后临时记住存档路径，预览前读取最新内容，修改／恢复后自动刷新，方便连续编辑。写回完成后弹出独立结果窗口，显示成功标志；可展开查看成功项与失败原因。写回仍按整笔事务处理，不把失败的事务报告为部分成功。ZIP 仅能导出，不能导入或整包恢复。
+编辑目标为识别出的 `game.data`、PlayerPrefs XML、`item_data_<UID>_.data` 与 `statistic_<UID>_.data`。XML 单文件模式支持角色、皮肤及已有宠物键；物品可独立修改，无需 game 或角色 XML。当前物品目录只开放 `AppVersion=80600`，不把默认分片替代 UID 分片。武器独立处理统计分片，需同账号物品分片的 80600 版本核对；快速／专家模式之外的其他 `.data` 可原字节备份和还原；自由编辑另支持逐文件解码导出与重新打包。预览、写前漂移检查、原件备份、写后复读、失败恢复均在应用内实现。选定账号后临时记住存档路径，预览前读取最新内容，修改后自动刷新；手动还原后清空旧目标，重新读取。写回完成后弹出独立结果窗口，显示成功标志；可展开查看成功项与失败原因。写回仍按整笔事务处理，不把失败的事务报告为部分成功。2.0.3 支持本工具 ZIP 导入和备份内文件覆盖还原，不等于完整应用数据恢复。
 
 宠物操作只处理映射表中当前账号 XML 已有的 `p<N>_unlock`；若 `game.data` 存在完整的 8.6.0 `petUnlock`，会先核对两侧状态再同步更新。格式或镜像不符时拒绝本次宠物写入。具体见 [alpha08 宠物说明](../quick-pets-alpha08.md)。
 

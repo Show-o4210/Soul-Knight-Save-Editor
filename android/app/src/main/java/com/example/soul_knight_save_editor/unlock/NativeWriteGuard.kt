@@ -42,4 +42,5 @@ class GuardedNativeSaveAccess(private val native: SaveAccess, private val guard:
         return native.discover(user, preferred, ownPackage, isCancelled, progress, found)
     }
     override fun backup(packageName: String, user: Int): BackupPayload { guard.checkInheritedWrite(); return native.backup(packageName, user) }
+    override fun freeSnapshot(packageName: String, user: Int): SaveSnapshot { guard.checkInheritedWrite(); return native.freeSnapshot(packageName, user) }
 }

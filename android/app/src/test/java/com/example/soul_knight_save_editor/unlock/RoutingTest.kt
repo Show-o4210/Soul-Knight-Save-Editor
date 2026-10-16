@@ -1,7 +1,6 @@
 package com.example.soul_knight_save_editor.unlock
 
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -10,6 +9,45 @@ import org.junit.rules.TemporaryFolder
 /** Exercise the shared scan/discovery/backup policy and repository with a selected transport. */
 class RoutingTest {
     @get:Rule val temp = TemporaryFolder()
+
+    @Test fun freeScanningAndWritingDoNotDependOnRoleItemCatalogOrAccountSchemas() {
+        AccessBackend.entries.forEach { backend ->
+            val selected = Access(backend)
+            selected.files.clear()
+            val source = SaveFile("${selected.root}/files/game.data", UnlockEngine.xor("""{"unlisted":1}""".toByteArray()),
+                "1010100:1010100", "600", "u:object_r:app_data_file:s0:c1,c2")
+            selected.files[source.path] = source
+            // The regular editor cannot identify a role/account here; free editing can still work.
+            assertThrows(IllegalArgumentException::class.java) { selected.scan("com.test.game", 10) }
+            val snapshot = selected.freeSnapshot("com.test.game", 10)
+            val (session, docs) = FreeEditEngine.create(snapshot, setOf(source.path), null, "content://workspace/session")
+            val edited = FreeDocument("edited", docs.single().name, """{"unlisted":2,"custom":true}""".toByteArray())
+            val plan = FreeEditEngine.plan(session, FreeEditEngine.match(session, listOf(edited)))
+            val repository = SaveRepository(temp.newFolder(), selected)
+            val id = repository.apply(session.snapshot, plan)
+            assertEquals(backend.id, repository.backendId(id))
+            assertEquals(2, FreeEditEngine.decode(selected.read(source.path).bytes, FreeCodec.GAME_JSON)["unlisted"]!!.jsonPrimitive.int)
+            repository.restore(id)
+            assertArrayEquals(source.bytes, selected.read(source.path).bytes)
+        }
+    }
+
+    @Test fun bothBackendsRestoreOpaqueBackupShardsAndReadingFlagsThroughSelectedTransport() {
+        AccessBackend.entries.forEach { backend ->
+            val selected = Access(backend)
+            val other = Access(AccessBackend.entries.single { it != backend })
+            val payload = selected.backup("com.test.game", 10)
+            selected.files.replaceAll { _, file -> file.copy(bytes = "later progress".toByteArray()) }
+            val repository = SaveRepository(temp.newFolder(), selected)
+            repository.restore(payload)
+            val opaque = payload.files.single { it.path.endsWith("/local.data") }
+            assertArrayEquals(opaque.bytes, selected.read(opaque.path).bytes)
+            val prefs = payload.files.single { it.path.endsWith(".xml") }
+            assertEquals("0", UnlockEngine.prefs(selected.read(prefs.path).bytes).getValue("OpenRijTest_42").getAttribute("value"))
+            assertEquals(backend.id, repository.backendId(repository.completed().single()))
+            assertTrue(other.calls.isEmpty())
+        }
+    }
 
     private class Access(backend: AccessBackend) : BaseSaveAccess(backend) {
         val root = "/data/user/10/com.test.game"

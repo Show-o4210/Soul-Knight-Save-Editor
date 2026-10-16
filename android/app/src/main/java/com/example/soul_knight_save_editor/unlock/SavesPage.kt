@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable internal fun SavesPage(model: AssistantModel, modifier: Modifier) {
     val state = model.state
+    val free = state.mode == AssistantMode.FREE
     var manual by rememberSaveable { mutableStateOf(false) }
     var packageDraft by rememberSaveable(state.packageName) { mutableStateOf(state.packageName) }
     val candidate = state.candidates.firstOrNull { it.packageName == state.packageName }
@@ -22,10 +23,10 @@ import androidx.compose.ui.unit.dp
         item { Panel(title = "本地存档", help = HelpTopics.saves) {
             Text(label, fontWeight = FontWeight.SemiBold)
             candidate?.version?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-            Button(if (state.pinnedTarget == null) model::scan else model::refresh, enabled = !state.busy && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth().testTag("scan-selected-game")) {
-                Text(if (state.pinnedTarget == null) "读取存档" else "刷新存档")
+            Button(if (free) model::freeScan else if (state.pinnedTarget == null) model::scan else model::refresh, enabled = !state.busy && state.pending.isEmpty(), modifier = Modifier.fillMaxWidth().testTag("scan-selected-game")) {
+                Text(if (free) "读取 .data 文件" else if (state.pinnedTarget == null) "读取存档" else "刷新存档")
             }
-            if (state.pinnedTarget != null) Row {
+            if (!free && state.pinnedTarget != null) Row {
                 Text("已记住存档位置", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
                 TextButton(model::scan, enabled = !state.busy && state.pending.isEmpty()) { Text("重新查找") }
             }
@@ -41,7 +42,11 @@ import androidx.compose.ui.unit.dp
             Text("有未完成的写回，请先恢复。", fontWeight = FontWeight.Bold)
             Button({ model.page(AssistantPage.BACKUPS) }, enabled = !state.busy) { Text("前往设置中的备份与恢复") }
         } }
-        state.snapshot?.let { snapshot -> item { Panel(title = "当前存档", help = HelpTopics.saves) {
+        if (free && state.freeSnapshot != null) item { Panel {
+            Text("已读取 ${state.freeSources.size} 个 .data 文件")
+            Button({ model.tab(WorkspaceTabs.free) }, enabled = !state.busy) { Text("选择文件并导出") }
+        } }
+        (if (free) null else state.snapshot)?.let { snapshot -> item { Panel(title = "当前存档", help = HelpTopics.saves) {
             Text("${snapshot.files.size} 份存档 · ${state.accounts.size} 个账号", style = MaterialTheme.typography.bodySmall)
             if (state.accounts.size > 1) {
                 Text("选择此版本中的账号：")

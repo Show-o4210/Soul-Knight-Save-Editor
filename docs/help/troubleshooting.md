@@ -38,7 +38,7 @@
 到 [Issues](https://github.com/Show-o4210/Soul-Knight-Save-Editor/issues) 描述具体过程；同类问题已有 Issue 时补充到原问题。可以复制这个模板：
 
 ```text
-助手版本：例如 2.0.2（18）
+助手版本：例如 2.0.3（21）
 游戏版本与渠道：
 设备／Android 版本：
 Root 管理器、访问方式：原生 Root 或 Shizuku Root

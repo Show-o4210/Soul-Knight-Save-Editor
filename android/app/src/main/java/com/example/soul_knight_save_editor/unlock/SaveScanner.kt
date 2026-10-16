@@ -9,6 +9,9 @@ enum class SaveSource(val directory: String, val depth: Int, val glob: String, v
 }
 
 object SaveLayout {
+    // Backups also contain opaque .data shards. Only restore writes these; the editor still
+    // selects sources through editablePath and the fixed source filename patterns below.
+    val restorablePath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+\\.data|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
     val packagePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
     private val dataNames = SaveSource.entries.filter { it.directory == "files" }
         .joinToString("|") { it.filename.pattern.removePrefix("^").removeSuffix("$") }

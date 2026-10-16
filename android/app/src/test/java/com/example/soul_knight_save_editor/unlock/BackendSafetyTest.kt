@@ -49,7 +49,7 @@ class BackendSafetyTest {
     }
 
     private fun snapshot(device: Device): SaveSnapshot {
-        val prefs = SaveFile("/data/user/10/com.test.game/shared_prefs/game.xml", "prefs-before".toByteArray(),
+        val prefs = SaveFile("/data/user/10/com.test.game/shared_prefs/game.xml", "<map><string name=\"test\">before</string></map>".toByteArray(),
             "1010100:1010100", "600", "u:object_r:app_data_file:s0:c1,c2")
         val game = prefs.copy(path = "/data/user/10/com.test.game/files/game.data", bytes = "game-before".toByteArray())
         device.files[prefs.path] = prefs
@@ -160,7 +160,7 @@ class BackendSafetyTest {
         assertTrue(device.operations.contains("stop:com.test.game:10"))
     }
 
-    @Test fun interruptedManualRestoreIsPendingAndCanResumeOnlyWithItsRestoreBackend() {
+    @Test fun interruptedManualRestoreHasItsOwnJournalAndRecoversThroughItsRestoreBackend() {
         val native = Device()
         val snapshot = snapshot(native)
         val directory = temp.newFolder()
@@ -168,24 +168,25 @@ class BackendSafetyTest {
         val id = repository.apply(snapshot, plan(snapshot))
         val shizuku = Device(AccessBackend.SHIZUKU_ROOT.id, native.files)
         val selected = SaveRepository(directory, shizuku)
-        shizuku.failAt = 2
+        shizuku.uncertainAt = 1
         assertThrows(IllegalStateException::class.java) { selected.restore(id) }
-        assertEquals(2, shizuku.attempts)
-        assertEquals(listOf(id), selected.pending())
-        assertEquals(AccessBackend.SHIZUKU_ROOT.id, selected.backendId(id))
-        assertArrayEquals(snapshot.game!!.bytes, shizuku.files.getValue(snapshot.game.path).bytes)
-        assertFalse(snapshot.prefs!!.bytes.contentEquals(shizuku.files.getValue(snapshot.prefs.path).bytes))
+        assertEquals(1, shizuku.attempts)
+        val recovery = selected.pending().single()
+        assertNotEquals(id, recovery)
+        assertEquals(AccessBackend.SHIZUKU_ROOT.id, selected.backendId(recovery))
+        assertArrayEquals(snapshot.prefs!!.bytes, shizuku.files.getValue(snapshot.prefs.path).bytes)
+        assertArrayEquals(plan(snapshot).outputs.getValue(snapshot.game!!.path), shizuku.files.getValue(snapshot.game.path).bytes)
         native.operations.clear()
-        assertThrows(IllegalArgumentException::class.java) { repository.recover(id) }
+        assertThrows(IllegalArgumentException::class.java) { repository.recover(recovery) }
         assertTrue(native.operations.isEmpty())
         val operations = shizuku.operations.toList()
         assertThrows(IllegalArgumentException::class.java) { selected.apply(snapshot, plan(snapshot)) }
         assertEquals(operations, shizuku.operations)
-        shizuku.failAt = -1
-        SaveRepository(directory, shizuku).recover(id)
-        assertOriginals(snapshot, shizuku)
+        shizuku.uncertainAt = -1
+        SaveRepository(directory, shizuku).recover(recovery)
+        snapshot.files.forEach { assertArrayEquals(plan(snapshot).outputs.getValue(it.path), shizuku.files.getValue(it.path).bytes) }
         assertTrue(selected.pending().isEmpty())
-        assertEquals(3, shizuku.attempts)
+        assertEquals(2, shizuku.attempts)
     }
 
     @Test fun manualRestoreChecksIdleBeforeStoppingOrReadingCompletedTransaction() {
@@ -201,7 +202,7 @@ class BackendSafetyTest {
         assertTrue(repository.pending().isEmpty())
     }
 
-    @Test fun driftBetweenRestorePreflightAndReplacementPreservesNewProgressAndPendingJournal() {
+    @Test fun driftDuringRestorePreflightPreservesNewProgressWithoutStartingJournal() {
         val device = Device()
         val snapshot = snapshot(device)
         val repository = SaveRepository(temp.newFolder(), device)
@@ -218,13 +219,27 @@ class BackendSafetyTest {
         assertThrows(IllegalArgumentException::class.java) { repository.restore(id) }
         assertEquals(attempts, device.attempts)
         assertArrayEquals(outsideProgress, device.files.getValue(game.path).bytes)
-        assertEquals(listOf(id), repository.pending())
-        val operations = device.operations.toList()
-        assertThrows(IllegalArgumentException::class.java) { repository.apply(snapshot, plan(snapshot)) }
-        assertEquals(operations, device.operations)
+        assertTrue(repository.pending().isEmpty())
+        assertEquals(listOf(id), repository.completed())
+    }
+
+    @Test fun outsideChangesDuringRestoreKeepNewRestoreJournalPendingWithoutOverwritingThem() {
+        val device = Device()
+        val snapshot = snapshot(device)
+        val repository = SaveRepository(temp.newFolder(), device)
+        val id = repository.apply(snapshot, plan(snapshot))
+        val game = snapshot.game!!
+        val outside = "outside progress".toByteArray()
+        var reads = 0
+        device.readHook = { path, live ->
+            if (path == game.path && ++reads == 3) live.copy(bytes = outside).also { device.files[path] = it } else live
+        }
+        assertThrows(IllegalStateException::class.java) { repository.restore(id) }
+        val recovery = repository.pending().single()
+        assertNotEquals(id, recovery)
+        assertArrayEquals(outside, device.files.getValue(game.path).bytes)
         device.readHook = null
-        assertThrows(IllegalArgumentException::class.java) { repository.recover(id) }
-        assertArrayEquals(outsideProgress, device.files.getValue(game.path).bytes)
-        assertEquals(listOf(id), repository.pending())
+        assertThrows(IllegalArgumentException::class.java) { repository.recover(recovery) }
+        assertArrayEquals(outside, device.files.getValue(game.path).bytes)
     }
 }

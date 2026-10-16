@@ -12,7 +12,7 @@ internal object ShizukuWire {
     }
     fun path(path: String, backupOnly: Boolean = false) {
         require(path.length <= 512 && !path.contains("..") &&
-            (SaveLayout.editablePath.matches(path) || backupOnly && backupPath.matches(path))) { "路径不在本地存档范围内" }
+            (SaveLayout.restorablePath.matches(path) || backupOnly && backupPath.matches(path))) { "路径不在本地存档范围内" }
     }
     fun directory(path: String, rootOnly: Boolean = false) {
         require(path.length <= 512 && !path.contains("..") && directory.matches(path) &&
