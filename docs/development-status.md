@@ -8,7 +8,7 @@
 
 - 当前源码版本为 `2.0.4-rc01` / versionCode 25，汇总 dev01–dev03 的游戏列表、视觉调整、8.7 现有功能适配与武器皮肤功能；沿用正式签名，APK 供维护者社区分发测试。
 - 按用户要求先推送源码，再构建本地 Release APK；不创建标签或 GitHub Release，公开下载仍指向 2.0.3。候选内容与反馈要点见[社区测试说明](releases/2.0.4-rc01.md)。
-- 核心实现已有下述 232 / 232 项 JVM 回归、Release 构建与 lint，以及虚拟机读取／预览检查。真实游戏写回和游戏内效果继续由社区验证。
+- rc01 的 `testDebugUnitTest assembleRelease lintRelease` 成功，JVM 232 / 232 通过，lint 为 0 errors / 57 warnings；版本与正式签名校验通过。APK SHA-256：`47795a4a9da905d081ab1939cff6d35c96e3bd910a67669a53352cc6839b2c94`。本轮未在设备安装 rc01，之前的虚拟机读取／预览检查见下述 dev03 记录。真实游戏写回和游戏内效果继续由社区验证。
 
 ## 武器皮肤开发（2.0.4-dev03，已纳入 rc01）
 
