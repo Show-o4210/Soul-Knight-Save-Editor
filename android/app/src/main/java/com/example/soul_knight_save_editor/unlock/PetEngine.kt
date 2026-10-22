@@ -5,9 +5,13 @@ import org.w3c.dom.Element
 
 data class PetState(val definition: PetDefinition, val unlocked: Boolean)
 
-/** Quick unlock uses only the 8.6.0 mapping and existing XML keys. */
+/** Both modes use known 8.6.0 / 8.7.0 orders and existing XML keys only. */
 object PetEngine {
-    private val allIds = PetCatalog.entries.take(17).map { it.id } + "Hide" + PetCatalog.entries.drop(17).map { it.id }
+    // Exact layouts: 8.6 ends at p56; 8.7 appends FishChipKing at p57.
+    private val knownOrders = listOf(56, 57).map { lastIndex ->
+        val entries = PetCatalog.entries.filter { it.index <= lastIndex }
+        entries.take(17).map { it.id } + "Hide" + entries.drop(17).map { it.id }
+    }
     private fun prefKey(account: String, index: Int) = (if (account.isEmpty()) "" else "${account}_") + "p${index}_unlock"
     private fun read(node: Element): Boolean {
         require(node.tagName == "string") { "宠物解锁键格式未知，暂不写入" }
@@ -22,7 +26,9 @@ object PetEngine {
     }
     private fun gamePets(root: JsonObject?): JsonObject? {
         val value = root?.get("petUnlock") ?: return null
-        require(value is JsonObject && value.keys.toList() == allIds) { "petUnlock 与 8.6.0 映射不符，宠物暂不可修改" }
+        require(value is JsonObject && value.keys.toList() in knownOrders) {
+            "petUnlock 与已核对的 8.6.0 / 8.7.0 映射不符，宠物暂不可修改"
+        }
         require(value.values.all { it is JsonPrimitive && !it.isString && it.booleanOrNull != null }) {
             "petUnlock 状态格式未知，暂不写入"
         }
@@ -37,7 +43,7 @@ object PetEngine {
         val states = PetCatalog.entries.mapNotNull { pet ->
             val node = nodes[prefKey(account, pet.index)] ?: return@mapNotNull null
             val unlocked = read(node)
-            if (mirror != null) require(mirror.getValue(pet.id).jsonPrimitive.boolean == unlocked) {
+            if (mirror != null) require((mirror[pet.id] as? JsonPrimitive)?.booleanOrNull == unlocked) {
                 "${pet.label} 的 XML 与 game.data 状态不一致，暂不写入"
             }
             PetState(pet, unlocked)

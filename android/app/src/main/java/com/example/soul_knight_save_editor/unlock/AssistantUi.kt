@@ -58,9 +58,20 @@ private val quickColors = lightColorScheme(primary = Color(0xFF66509C), onPrimar
 private val expertColors = darkColorScheme(primary = Color(0xFFD5BFFF), onPrimary = Color(0xFF302047),
     background = Color(0xFF1D1330), surface = Color(0xFF2B2041), surfaceVariant = Color(0xFF3C2E56),
     onSurface = Color(0xFFF6EEFF), onSurfaceVariant = Color(0xFFCEBEDF), outlineVariant = Color(0xFF65527E))
-private val freeColors = darkColorScheme(primary = Color(0xFF81D8CF), onPrimary = Color(0xFF003A36),
-    background = Color(0xFF102927), surface = Color(0xFF1C3633), surfaceVariant = Color(0xFF2D4945),
-    onSurface = Color(0xFFE4F5F1), onSurfaceVariant = Color(0xFFB5CDC8), outlineVariant = Color(0xFF526D67))
+private val freeColors = darkColorScheme(primary = Color(0xFFE7E7EB), onPrimary = Color(0xFF151517),
+    primaryContainer = Color(0xFF333338), onPrimaryContainer = Color(0xFFF1F1F4),
+    secondary = Color(0xFFC6C6CE), onSecondary = Color(0xFF202024),
+    secondaryContainer = Color(0xFF2B2B30), onSecondaryContainer = Color(0xFFE9E9ED),
+    tertiary = Color(0xFFD6D6DE), onTertiary = Color(0xFF1F1F22),
+    tertiaryContainer = Color(0xFF36363B), onTertiaryContainer = Color(0xFFEAEAF0),
+    background = Color(0xFF09090B), onBackground = Color(0xFFF5F5F7),
+    surface = Color(0xFF18181C), surfaceVariant = Color(0xFF25252A),
+    surfaceDim = Color(0xFF111113), surfaceBright = Color(0xFF39393E),
+    surfaceContainerLowest = Color(0xFF0B0B0D), surfaceContainerLow = Color(0xFF18181C),
+    surfaceContainer = Color(0xFF1E1E22), surfaceContainerHigh = Color(0xFF28282D),
+    surfaceContainerHighest = Color(0xFF333338),
+    onSurface = Color(0xFFF5F5F7), onSurfaceVariant = Color(0xFFB9B9C3),
+    outline = Color(0xFF777780), outlineVariant = Color(0xFF42424B), surfaceTint = Color(0xFFE7E7EB))
 private val guideColors = darkColorScheme(primary = Color(0xFFE1D0FB), onPrimary = Color(0xFF38264F),
     background = Color(0xFF675A7B), surface = Color(0xFF423550),
     onSurface = Color(0xFFFFF8FF), onSurfaceVariant = Color(0xFFE8DBF3), outlineVariant = Color(0xFFA995BF))
@@ -125,11 +136,7 @@ private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getD
         val palette = when (mode) { null -> guideColors; AssistantMode.QUICK -> quickColors; AssistantMode.EXPERT -> expertColors; AssistantMode.FREE -> freeColors }
         MaterialTheme(colorScheme = palette) {
             Box(Modifier.fillMaxSize()) {
-                Image(painterResource(if (mode == AssistantMode.QUICK) R.drawable.background_quick else R.drawable.background_expert), null,
-                    Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-                if (mode == null) Box(Modifier.matchParentSize().background(Brush.verticalGradient(
-                    listOf(Color(0xFF837397).copy(alpha = .86f), Color(0xFF5D506E).copy(alpha = .88f)))))
-                else Box(Modifier.matchParentSize().background(palette.background.copy(alpha = if (mode == AssistantMode.EXPERT) .60f else .68f)))
+                ArchiveBackdrop(mode, Modifier.matchParentSize())
                 Column(Modifier.align(Alignment.TopCenter).widthIn(max = 720.dp).fillMaxSize().safeDrawingPadding().padding(horizontal = 18.dp).nestedScroll(headerScroll)) {
                     AnimatedHeader(mode, page, state.busy, headerCompact, titleClick, model::guide,
                         { model.page(AssistantPage.SETTINGS) }, model::back)
@@ -180,12 +187,12 @@ private val workspaceSections = listOf(
 @Composable private fun Guide(model: AssistantModel, modifier: Modifier) {
     val state = model.state
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ModeCard("快速模式", "角色、物品与武器快捷修改", "选择角色、物品或武器获取次数；预览后再应用。", false,
+        ModeCard("快速模式", "角色、物品与武器快捷修改", "选择角色、物品或武器获取次数；预览后再应用。", AssistantMode.QUICK,
             Modifier.height(204.dp).fillMaxWidth()) { model.chooseMode(AssistantMode.QUICK) }
-        ModeCard("专家模式", "角色、物品与武器逐项选择", "选择条目与参数，预览后统一写回。", true,
+        ModeCard("专家模式", "角色、物品与武器逐项选择", "选择条目与参数，预览后统一写回。", AssistantMode.EXPERT,
             Modifier.height(204.dp).fillMaxWidth()) { model.chooseMode(AssistantMode.EXPERT) }
-        ModeCard("自由编辑", "导出解码文件 · 外部应用编辑 · 导入打包", "自行修改文件内容；这里不内置文本编辑器。", true,
-            Modifier.height(204.dp).fillMaxWidth(), tag = "choose-free") { model.chooseMode(AssistantMode.FREE) }
+        ModeCard("自由编辑", "导出解码文件 · 外部应用编辑 · 导入打包", "自行修改文件内容；这里不内置文本编辑器。", AssistantMode.FREE,
+            Modifier.height(204.dp).fillMaxWidth()) { model.chooseMode(AssistantMode.FREE) }
         Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .78f),
             contentColor = MaterialTheme.colorScheme.onSurface) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp)) {
@@ -197,18 +204,25 @@ private val workspaceSections = listOf(
     }
 }
 
-@Composable private fun ModeCard(title: String, caption: String, description: String, dark: Boolean, modifier: Modifier,
-    tag: String = if (dark) "choose-expert" else "choose-quick", onClick: () -> Unit) {
-    Card(onClick, shape = RoundedCornerShape(24.dp), modifier = modifier.testTag(tag)) {
+@Composable private fun ModeCard(title: String, caption: String, description: String, mode: AssistantMode, modifier: Modifier,
+    onClick: () -> Unit) {
+    val dark = mode != AssistantMode.QUICK
+    val free = mode == AssistantMode.FREE
+    Card(onClick, shape = RoundedCornerShape(24.dp), modifier = modifier.testTag("choose-${mode.name.lowercase()}")) {
         Box(Modifier.fillMaxSize()) {
-            Image(painterResource(if (dark) R.drawable.background_expert else R.drawable.background_quick), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-            Box(Modifier.matchParentSize().background((if (dark) Color(0xFF25153F) else Color(0xFFF8F1FF)).copy(alpha = .77f)))
+            if (free) {
+                Box(Modifier.matchParentSize().background(Brush.horizontalGradient(listOf(Color(0xFF101012), Color(0xFF222226)))))
+                FreeCardArtwork(Modifier.matchParentSize())
+            } else {
+                Image(painterResource(if (dark) R.drawable.background_expert else R.drawable.background_quick), null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                Box(Modifier.matchParentSize().background((if (dark) Color(0xFF25153F) else Color(0xFFF8F1FF)).copy(alpha = .77f)))
+            }
             Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
-                Text(caption, style = MaterialTheme.typography.labelMedium, color = if (dark) Color(0xFFD8C5EF) else Color(0xFF6A4F94))
+                Text(caption, style = MaterialTheme.typography.labelMedium, color = if (free) Color(0xFFB9B9C3) else if (dark) Color(0xFFD8C5EF) else Color(0xFF6A4F94))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
                         color = if (dark) Color.White else Color(0xFF332346))
-                    Text(description, color = if (dark) Color(0xFFE3D5F2) else Color(0xFF5A486F), style = MaterialTheme.typography.bodyMedium)
+                    Text(description, color = if (free) Color(0xFFD6D6DE) else if (dark) Color(0xFFE3D5F2) else Color(0xFF5A486F), style = MaterialTheme.typography.bodyMedium)
                 }
                 Text("点击进入  →", color = if (dark) Color.White else Color(0xFF513973), fontWeight = FontWeight.SemiBold)
             }
@@ -291,7 +305,7 @@ private val workspaceSections = listOf(
     val quick = renderMode == AssistantMode.QUICK
     val characters = EditEngine.hasCharacters(state.choices.selection(renderMode, catalog))
     val items = state.itemsFor(renderMode).hasChanges
-    val weapons = if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges
+    val weapons = (if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges) || state.weaponSkinsFor(renderMode).hasChanges
     Text("跨页待修改：角色${if (characters) "已选" else "未选"} · 物品${if (items) "已选" else "未选"} · 武器${if (weapons) "已选" else "未选"}",
         style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
     Button(onPreview, enabled = !state.busy && state.pending.isEmpty() && state.personalUseAccepted && state.mode == renderMode &&

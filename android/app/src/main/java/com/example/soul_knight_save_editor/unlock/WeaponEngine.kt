@@ -58,8 +58,8 @@ object WeaponEngine {
     }
     fun inspect(bytes: ByteArray, itemBytes: ByteArray): JsonObject {
         val version = ItemCodec.decode(itemBytes)["AppVersion"] as? JsonPrimitive
-        require(version != null && !version.isString && version.intOrNull == WeaponCatalog.VERSION) {
-            "当前武器目录适配 8.6.0；同账号物品分片的版本未核对，武器功能暂不可用"
+        require(version != null && !version.isString && version.intOrNull in ItemCatalog.SUPPORTED_VERSIONS) {
+            "当前武器目录适配 8.6.0 / 8.7.0；同账号物品分片的版本未核对，武器功能暂不可用"
         }
         return StatisticCodec.decode(bytes).also { counters(it) }
     }

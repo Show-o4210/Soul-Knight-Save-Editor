@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.dp
             Text("仅检查格式与编码，不修正字段、镜像或分片关系。自行修改造成的游戏内异常由用户承担；写入前会自动备份。", style = MaterialTheme.typography.bodySmall)
             Text(state.packageName, style = MaterialTheme.typography.labelSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("选择游戏") }
+                OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("切换游戏版本") }
                 OutlinedButton(model::freeScan, enabled = !state.busy && state.pending.isEmpty()) { Text("读取文件") }
             }
         } }

@@ -9,6 +9,9 @@
 - [Android 实现、构建与私有样本测试](android-implementation.md)
 - [正式签名与证书](../android-signing.md)
 - [开发状态与未验收范围](../development-status.md)
+- [2.0.4-rc01 社区测试候选（暂不发布 GitHub Release）](../releases/2.0.4-rc01.md)
+- [8.7.0 现有功能适配（已纳入 rc01）](../compatibility-8.7.0.md)
+- [武器皮肤目录、索引与编辑（已纳入 rc01）](../weapon-skins-8.7.0.md)
 - [Root / Shizuku 文件与事务验证（2026-10-09）](../root-shizuku-validation.md)
 - [Python 桌面工程](../../desktop/README.md)
 

@@ -6,12 +6,14 @@ import kotlinx.serialization.json.*
 object EditEngine {
     fun itemAccount(path: String): String? = SaveLayout.account(path, SaveSource.ITEM)
     fun statisticAccount(path: String): String? = SaveLayout.account(path, SaveSource.STATISTIC)
+    fun weaponSkinAccount(path: String): String? = SaveLayout.account(path, SaveSource.WEAPON_SKINS)
     fun accounts(snapshot: SaveSnapshot): List<String> {
         val prefs = snapshot.prefs?.let { UnlockEngine.accounts(it.bytes) }.orEmpty()
         val items = snapshot.items.mapNotNull { itemAccount(it.path) }
         val statistics = snapshot.statistics.mapNotNull { statisticAccount(it.path) }
-        val named = (prefs + items + statistics).filter(String::isNotEmpty).distinct().sorted()
-        return if (named.isNotEmpty()) named else (prefs + items + statistics).distinct()
+        val skins = snapshot.weaponSkins.mapNotNull { weaponSkinAccount(it.path) }
+        val named = (prefs + items + statistics + skins).filter(String::isNotEmpty).distinct().sorted()
+        return if (named.isNotEmpty()) named else (prefs + items + statistics + skins).distinct()
     }
     fun item(snapshot: SaveSnapshot, account: String): SaveFile? {
         require(account in accounts(snapshot)) { "账号不在扫描结果中" }
@@ -32,14 +34,24 @@ object EditEngine {
     }
     fun weaponStates(snapshot: SaveSnapshot, account: String): List<WeaponState> = WeaponEngine.states(WeaponEngine.inspect(
         requireNotNull(statistic(snapshot, account)).bytes, requireNotNull(item(snapshot, account)).bytes))
+    fun weaponSkinFile(snapshot: SaveSnapshot, account: String): SaveFile? {
+        require(account in accounts(snapshot)) { "账号不在扫描结果中" }
+        val files = snapshot.weaponSkins.filter { weaponSkinAccount(it.path) == account }
+        require(files.size <= 1) { "同一账号存在多份武器皮肤分片，暂不自动选择" }
+        return files.singleOrNull()
+    }
+    fun weaponSkinInventory(snapshot: SaveSnapshot, account: String): WeaponSkinInventory = WeaponSkinEngine.inspect(
+        requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器皮肤分片" }.bytes,
+        requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器皮肤目录版本" }.bytes)
     fun hasCharacters(selection: UnlockSelection) = selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.hasProgress || selection.pets || selection.petIds.isNotEmpty()
 
     fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: Boolean = false): SavePlan {
         return preview(snapshot, account, characters, items, WeaponSelection(allPlusEight = weapons))
     }
-    fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: WeaponSelection): SavePlan {
+    fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: WeaponSelection,
+        weaponSkins: WeaponSkinSelection = WeaponSkinSelection()): SavePlan {
         require(account in accounts(snapshot)) { "账号不在扫描结果中" }
-        require(hasCharacters(characters) || items.hasChanges || weapons.hasChanges) { "请先选择要修改的内容" }
+        require(hasCharacters(characters) || items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges) { "请先选择要修改的内容" }
         val outputs = linkedMapOf<String, ByteArray>()
         val changes = mutableListOf<String>()
         val sections = linkedMapOf<String, List<String>>()
@@ -90,7 +102,16 @@ object EditEngine {
             changes += patch.changes
         }
         sections["武器"] = changes.drop(weaponStart)
-        if ((items.hasChanges || weapons.hasChanges) && !hasCharacters(characters)) snapshot.prefs?.let { prefs ->
+        val skinStart = changes.size
+        if (weaponSkins.hasChanges) {
+            val file = requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器皮肤分片" }
+            val item = requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器皮肤目录版本" }
+            val patch = WeaponSkinEngine.edit(file.bytes, item.bytes, weaponSkins)
+            outputs[file.path] = patch.bytes
+            changes += patch.changes
+        }
+        sections["武器皮肤"] = changes.drop(skinStart)
+        if ((items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges) && !hasCharacters(characters)) snapshot.prefs?.let { prefs ->
             val (bytes, flags) = UnlockEngine.localReadingFlags(prefs.bytes, account)
             if (flags.isNotEmpty()) outputs[prefs.path] = bytes
             changes += flags

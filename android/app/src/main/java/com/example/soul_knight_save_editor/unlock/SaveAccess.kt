@@ -51,7 +51,7 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
     final override fun freeSnapshot(packageName: String, user: Int): SaveSnapshot {
         val root = SaveLayout.root(packageName, user)
         stop(packageName, user)
-        require(exists(root)) { "未找到所选游戏的数据目录" }
+        require(exists(root)) { "未找到所选版本的数据，请切换游戏版本，或扫描全部游戏版本后再读取。" }
         val paths = backupPaths(packageName, user)
         require(paths.isNotEmpty() && paths.size <= 120) { "没有找到 .data 文件，或文件数量超过当前支持范围" }
         var total = 0L

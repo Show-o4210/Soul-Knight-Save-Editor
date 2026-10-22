@@ -1,6 +1,6 @@
 package com.example.soul_knight_save_editor.unlock
 
-/** 8.6.0 candidate order from docs/pet-mapping-8.6.0.md. Hide (17) has no official name and is excluded. */
+/** Reviewed 8.6.0 / 8.7.0 order. Hide (17) has no official name and is excluded. */
 data class PetDefinition(val index: Int, val id: String, val label: String)
 
 object PetCatalog {
@@ -60,6 +60,7 @@ object PetCatalog {
         PetDefinition(53, "ChillyGo", "凉块"),
         PetDefinition(54, "Nian", "来财"),
         PetDefinition(55, "CatMecha", "机甲阿凉"),
-        PetDefinition(56, "EscapeMonkey", "小疯猴")
+        PetDefinition(56, "EscapeMonkey", "小疯猴"),
+        PetDefinition(57, "FishChipKing", "鱼干之王")
     )
 }

@@ -187,13 +187,18 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         val paths = mutableListOf<String>()
         // No pipelines: find/grep errors cannot inherit head's successful exit.
         if (exists(prefs)) {
-            val xmls = run("find ${quote(prefs)} -maxdepth 1 -type f -name '*.xml' -size -1048576c", "搜索 XML 位置", packageName, user)
+            // Older Android toybox find rejects the byte suffix in -size ...c. Check bytes
+            // with the same stat primitive used by verified reads, before inspecting content.
+            val xmls = run("find ${quote(prefs)} -maxdepth 1 -type f -name '*.xml'", "搜索 XML 位置", packageName, user)
                 .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
             require(xmls.size <= 128) { "候选 XML 过多，暂不自动搜索" }
             for (path in xmls) {
                 require(path.startsWith("$prefs/") && !path.contains("..") && path.removePrefix("$prefs/").split('/').size == 1) { "搜索路径超出目标应用范围" }
                 if (!pathPattern.matches(path)) continue
                 val q = checked(path)
+                val size = run("stat -c '%s' $q", "检查搜索 XML 大小", packageName, user).trim().toLongOrNull()
+                require(size != null && size >= 0) { "搜索 XML 文件大小无法识别" }
+                if (size == 0L || size >= SaveDiscovery.MAX_XML_BYTES) continue
                 val (request, output) = result("grep -l -E 'c[0-9]+_(unlock|skin[0-9]+)' $q", "检查 XML 搜索特征", packageName, user)
                 if (output.exitCode == 1 && output.mergedOutput.isBlank()) continue
                 successful(request, output)

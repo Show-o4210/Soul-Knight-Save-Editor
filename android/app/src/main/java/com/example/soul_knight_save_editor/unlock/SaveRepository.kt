@@ -7,8 +7,8 @@ import java.util.UUID
 
 data class SaveFile(val path: String, val bytes: ByteArray, val owner: String, val mode: String, val context: String)
 data class SaveSnapshot(val packageName: String, val user: Int, val prefs: SaveFile?, val game: SaveFile?, val items: List<SaveFile> = emptyList(),
-    val statistics: List<SaveFile> = emptyList()) {
-    val files get() = listOfNotNull(prefs, game) + items + statistics
+    val statistics: List<SaveFile> = emptyList(), val weaponSkins: List<SaveFile> = emptyList()) {
+    val files get() = listOfNotNull(prefs, game) + items + statistics + weaponSkins
 }
 data class SavePlan(val outputs: Map<String, ByteArray>, val changes: List<String>, val sections: Map<String, List<String>> = emptyMap())
 interface DeviceStorage {
@@ -213,7 +213,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         device.assertIdleForRecovery()
         device.stop(payload.packageName, payload.user)
         val files = payload.files + listOfNotNull(fallback?.let(device::read))
-        val shardAccounts = payload.files.mapNotNull { EditEngine.itemAccount(it.path) ?: EditEngine.statisticAccount(it.path) }.distinct()
+        val shardAccounts = payload.files.mapNotNull { EditEngine.itemAccount(it.path) ?: EditEngine.statisticAccount(it.path) ?: EditEngine.weaponSkinAccount(it.path) }.distinct()
         val proposed = files.associate { source ->
             var bytes = source.bytes
             if (source.path.contains("/shared_prefs/")) {

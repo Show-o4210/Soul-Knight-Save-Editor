@@ -20,6 +20,8 @@ fun AssistantState.selectPackage(value: String): AssistantState = copy(
     freeSession = null, freeReview = null, freeOpenRequest = null,
     progression = emptyList(), weaponStates = emptyList(), expertItems = ItemChoices(), expertWeapons = WeaponChoices(), choices = ModeChoices(), itemChoices = ItemChoices(), itemRoot = null,
     weaponInfo = null, weaponMessage = "请先扫描武器存档",
+    weaponSkinInventory = null, weaponSkinMessage = "请先读取武器皮肤存档",
+    quickWeaponSkins = WeaponSkinSelection(), expertWeaponSkins = WeaponSkinSelection(),
     preview = null, previewMode = null, itemMessage = "请先扫描物品存档",
     page = AssistantPage.WORKSPACE, workspaceTab = WorkspaceTabs.saves.id,
     message = "已切换目标，请扫描这个版本的本地存档。"
@@ -31,6 +33,8 @@ fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): A
     freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(), freeAccounts = emptyList(), freeAccount = null, freeReview = null,
     progression = emptyList(), weaponStates = emptyList(), petStates = emptyList(), choices = ModeChoices(),
     itemRoot = null, itemChoices = ItemChoices(), expertItems = ItemChoices(), expertWeapons = WeaponChoices(),
+    weaponSkinInventory = null, weaponSkinMessage = "请先读取武器皮肤存档",
+    quickWeaponSkins = WeaponSkinSelection(), expertWeaponSkins = WeaponSkinSelection(),
     weaponInfo = null, preview = null, previewMode = null, message = message,
     itemMessage = "请先读取存档", weaponMessage = "请先读取存档", petMessage = "请先读取存档"
 )

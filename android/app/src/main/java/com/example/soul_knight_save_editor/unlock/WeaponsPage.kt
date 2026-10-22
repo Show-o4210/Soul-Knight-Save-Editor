@@ -13,12 +13,26 @@ import androidx.compose.ui.unit.dp
 
 @Composable internal fun WeaponsPage(model: AssistantModel, mode: AssistantMode, modifier: Modifier) {
     WeaponContent(model.state, mode, modifier, { model.tab(WorkspaceTabs.saves) }, model::weapons,
-        model::preview, model::requestConsent, { model.page(AssistantPage.BACKUPS) }, model::expertWeapons)
+        model::preview, model::requestConsent, { model.page(AssistantPage.BACKUPS) }, model::expertWeapons, model::weaponSkins)
 }
 
 @Composable internal fun WeaponContent(state: AssistantState, mode: AssistantMode, modifier: Modifier = Modifier,
     onSaves: () -> Unit, onSelect: (Boolean) -> Unit, onPreview: () -> Unit, onConsent: () -> Unit, onBackups: () -> Unit,
-    onExpert: (WeaponChoices) -> Unit = {}) {
+    onExpert: (WeaponChoices) -> Unit = {}, onSkins: (WeaponSkinSelection) -> Unit = {}) {
+    var skins by rememberSaveable { mutableStateOf(false) }
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FilterChip(!skins, { skins = false }, label = { Text("获取次数") }, modifier = Modifier.testTag("weapon-counts-tab"))
+            FilterChip(skins, { skins = true }, label = { Text("武器皮肤") }, modifier = Modifier.testTag("weapon-skins-tab"))
+        }
+        if (skins) WeaponSkinContent(state, mode, Modifier.weight(1f), onSaves, onPreview, onConsent, onBackups, onSkins)
+        else WeaponObtainContent(state, mode, Modifier.weight(1f), onSaves, onSelect, onPreview, onConsent, onBackups, onExpert)
+    }
+}
+
+@Composable private fun WeaponObtainContent(state: AssistantState, mode: AssistantMode, modifier: Modifier,
+    onSaves: () -> Unit, onSelect: (Boolean) -> Unit, onPreview: () -> Unit, onConsent: () -> Unit, onBackups: () -> Unit,
+    onExpert: (WeaponChoices) -> Unit) {
     var query by rememberSaveable(state.packageName, state.catalog?.account) { mutableStateOf("") }
     var selectedOnly by rememberSaveable { mutableStateOf(false) }
     var batch by rememberSaveable(state.packageName, state.catalog?.account) { mutableStateOf("") }

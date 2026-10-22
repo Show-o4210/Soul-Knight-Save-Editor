@@ -37,7 +37,7 @@ object FreeEditEngine {
             UnlockEngine.accounts(file.bytes) + nodes.keys.mapNotNull { readingFlag.matchEntire(it)?.groupValues?.get(1) }
         }
     }).distinct().sorted()
-    private fun shardAccount(path: String) = EditEngine.itemAccount(path) ?: EditEngine.statisticAccount(path)
+    private fun shardAccount(path: String) = EditEngine.itemAccount(path) ?: EditEngine.statisticAccount(path) ?: EditEngine.weaponSkinAccount(path)
     private fun root(bytes: ByteArray) = Json.parseToJsonElement(UnlockEngine.utf8(bytes).removePrefix("\uFEFF")).jsonObject
     fun decode(bytes: ByteArray, codec: FreeCodec): JsonObject = when (codec) {
         FreeCodec.GAME_JSON -> root(UnlockEngine.xor(bytes))

@@ -34,6 +34,7 @@ class VivoAccountTest {
                 SaveSource.GAME -> path.endsWith("/game.data")
                 SaveSource.ITEM -> path.substringAfterLast('/').startsWith("item_data")
                 SaveSource.STATISTIC -> path.substringAfterLast('/').startsWith("statistic")
+                SaveSource.WEAPON_SKINS -> path.substringAfterLast('/').startsWith("weapon_evolution_data")
             } }
         }
         override fun read(path: String) = SaveFile(path, files.getValue(path), "1000:1000", "600", "")

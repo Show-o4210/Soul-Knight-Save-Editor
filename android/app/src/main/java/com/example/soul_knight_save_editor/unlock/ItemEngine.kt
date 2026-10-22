@@ -76,8 +76,8 @@ object ItemCodec {
 object ItemEngine {
     fun inspect(bytes: ByteArray): JsonObject = ItemCodec.decode(bytes).also { root ->
         val version = root["AppVersion"] as? JsonPrimitive
-        require(version != null && !version.isString && version.intOrNull == ItemCatalog.VERSION) {
-            "当前物品目录适配 8.6.0；此存档版本未核对，物品功能暂不可用"
+        require(version != null && !version.isString && version.intOrNull in ItemCatalog.SUPPORTED_VERSIONS) {
+            "当前物品目录适配 8.6.0 / 8.7.0；此存档版本未核对，物品功能暂不可用"
         }
     }
     fun quantity(root: JsonObject, key: ItemKey): Int {

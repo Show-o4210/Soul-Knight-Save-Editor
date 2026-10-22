@@ -105,6 +105,25 @@ class ItemEngineTest {
         assertThrows(IllegalArgumentException::class.java) { ItemCodec.decode("invalid".toByteArray()) }
         assertThrows(IllegalArgumentException::class.java) { edit(root(), ItemSelection()) }
     }
+    @Test fun reviewedVersionsPreserveVersionAndUnrelated87Fields() {
+        for (version in listOf(80600, 80700)) {
+            val start = JsonObject(root(",\"trainingJourney\":{\"revision\":2,\"period\":9},\"cumulativeFishCount\":3258,\"materials\":{\"material_cell\":9,\"material_bp_point\":12}") +
+                ("AppVersion" to JsonPrimitive(version)))
+            val patch = edit(start, ItemSelection(increments = mapOf(cell to 1000)))
+            assertEquals(1009, ItemEngine.quantity(patch.root, cell))
+            assertEquals(start - "materials", patch.root - "materials")
+            assertEquals(JsonPrimitive(12), patch.root.getValue("materials").jsonObject["material_bp_point"])
+        }
+    }
+    @Test fun versionGateDoesNotAcceptDefaultsStringsOrFutureVersions() {
+        for (version in listOf(JsonPrimitive(0), JsonPrimitive(80701), JsonPrimitive(80800),
+            JsonPrimitive("80700"), JsonPrimitive(80700.5), JsonNull)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                ItemEngine.inspect(ItemCodec.encode(JsonObject(root() + ("AppVersion" to version))))
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) { ItemEngine.inspect(ItemCodec.encode(JsonObject(root() - "AppVersion"))) }
+    }
     @Test fun privateSampleOfflineRegressionLeavesSourceBytesUntouched() {
         val path = System.getProperty("item.baseline").orEmpty()
         assumeTrue("Optional private fixture was not supplied", path.isNotBlank())

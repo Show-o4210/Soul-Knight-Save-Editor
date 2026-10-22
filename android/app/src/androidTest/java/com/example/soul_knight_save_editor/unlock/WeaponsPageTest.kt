@@ -36,7 +36,24 @@ class WeaponsPageTest {
                 onSaves = {}, onSelect = {}, onPreview = {}, onConsent = {}, onBackups = {})
         } }
         compose.onNodeWithText("全部武器获取次数 +8").assertDoesNotExist()
-        compose.onNodeWithText("专家模式武器入口已预留。逐项选择与自定义次数后续提供。").assertIsDisplayed()
+        compose.onNodeWithText("逐项选择").assertIsDisplayed()
         compose.onNodeWithTag("preview-all-edits").assertIsNotEnabled()
+    }
+    @Test fun skinOnlyQuickDraftEnablesSharedPreviewAndDoesNotSelectObtainCounts() {
+        var state by mutableStateOf(scanned.copy(weaponSkinInventory = WeaponSkinInventory(80700,
+            kotlinx.serialization.json.JsonObject(emptyMap()), emptyList(), 0)))
+        compose.setContent { MaterialTheme { Box(Modifier.width(320.dp)) {
+            WeaponContent(state, AssistantMode.QUICK, onSaves = {}, onSelect = {}, onPreview = {}, onConsent = {}, onBackups = {},
+                onSkins = { state = state.copy(quickWeaponSkins = it) })
+        } } }
+        compose.onNodeWithTag("weapon-skins-tab").performClick()
+        compose.onNodeWithTag("weapon-skins-list").performScrollToNode(hasText("解锁已确认的全部武器皮肤"))
+        compose.onNodeWithText("解锁已确认的全部武器皮肤").performClick()
+        compose.onNodeWithTag("preview-all-edits").assertIsEnabled()
+        compose.runOnIdle {
+            assertTrue(state.quickWeaponSkins.unlockAll)
+            assertTrue(state.quickWeaponSkins.current.isEmpty())
+            assertFalse(state.choices.quickWeapons)
+        }
     }
 }

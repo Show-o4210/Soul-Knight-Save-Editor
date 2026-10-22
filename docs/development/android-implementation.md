@@ -2,13 +2,13 @@
 
 [开发文档索引](README.md) · [用户帮助](../help/README.md)
 
-当前源码为正式版 **`2.0.3` / versionCode 21**，GitHub 标签为 `v2.0.3`：[下载正式 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.3/SoulKnightSaveEditor-2.0.3.apk) · [发布说明](../releases/2.0.3.md)。增加自由编辑、ZIP 导入还原、备份重命名与保留上限，保留 2.0.2 的原生 Root／Shizuku Root 双通道。原生 Root 继续默认。
+当前源码为社区测试候选 **`2.0.4-rc01` / versionCode 25**，增加游戏列表、8.7 适配、宠物映射修复、三把遗漏武器和武器皮肤功能，详见[候选说明](../releases/2.0.4-rc01.md)。暂不创建 GitHub Release，APK 由维护者另行分发测试。当前正式版仍为 `2.0.3` / versionCode 21，标签 `v2.0.3`：[下载正式 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.3/SoulKnightSaveEditor-2.0.3.apk) · [发布说明](../releases/2.0.3.md)。原生 Root 继续默认。
 
 开发阶段 `2.0.3-dev01` / versionCode 19（已纳入 2.0.3），增加 ZIP 导入／限定范围还原、备份重命名、递增编号与保留上限。版本号递增也使 Shizuku UserService 加载更新后的文件范围规则。还原新建独立事务，原件及其 SHA-256 不改；自动故障恢复继续按原事务检查，详情见[备份说明](../help/backup-and-update.md)。
 
 后续开发阶段 `2.0.3-dev02` / versionCode 20（已纳入 2.0.3），增加第三个自由编辑入口。`FreeEditEngine` 只负责内容编解码、来源匹配与写回计划；`FreeEditStore` 保留私有原件和不可由外部文件改变的对应关系；`FreeEditDocuments` 使用用户授权的本地 SAF 目录，目录／逐文件打开始终包装为应用选择器。自由扫描独立于角色与物品业务识别，支持已知 JSON 编码和明确标识的原始字节导入。大整数排版不经过会转换为浮点数的 JSON 序列化路径。完整流程与范围见[自由编辑说明](../help/free-editing.md)。
 
-这是需要 Root 的本地存档助手。**文件读写最近测试时间为 2026 年 10 月 9 日，存档适配基准仍为元气骑士 8.6.0。** 本次在 Pixel 6 / Android 16 上验证应用自身合成目录中的文件读写、原件备份、事务恢复及 owner、mode、SELinux context；原生 Root 和 Shizuku Root 通道测试通过。未修改真实游戏存档或验证游戏内效果，OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，**不保证实际可用**。开发候选的详细修改与测试记录见 [Root / Shizuku 验证记录](../root-shizuku-validation.md)。
+这是需要 Root 的本地存档助手。当前候选已核对元气骑士 8.6.0／8.7.0。2026-10-22 在 Android 9 虚拟机验证原生 Root 读取 8.7 及修改预览，未实际写回游戏。文件读写双通道最近完整设备检查为 2026-10-09：Pixel 6 / Android 16 上通过应用自身合成目录验证文件读写、原件备份、事务恢复及 owner、mode、SELinux context。OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，详细范围见[开发状态](../development-status.md)和 [Root / Shizuku 验证记录](../root-shizuku-validation.md)。
 
 设置 → 存档访问方式可选择「原生 Root（默认）」或「Shizuku Root（备选）」。Shizuku 需要另行安装并通过 Root 启动；选择后通过按钮授权、检查服务 UID 和 UserService 身份，再读取目标存档。ADB 模式会明确拒绝私有存档访问，不能作为免 Root 方案。一个操作和事务固定使用一个后端，操作中或有未完成事务时禁止切换；切换后旧快照、草稿和预览失效，需重新读取。失败诊断仅在本地展示和复制，不上传存档或日志。
 
@@ -36,10 +36,11 @@ Debug APK 位于 `app/build/outputs/apk/debug/app-debug.apk`，使用调试签�
 | 材料、通用进化碎片、种子、兑换券 | 四个分类按钮，每项 +1000，可连续点击及撤销一次 | 逐项／选中批量设置目标数量或自定义增加量 |
 | 小鱼干、普通／英雄试玩券 | 三个独立非负整数输入框，留空不改 | 逐项目标数量或选中批量设置 |
 | 武器获取次数 | 统一 +8；已知编号武器缺失键补入，已有其他武器获取键也累加；默认关闭 | 名称／ID 搜索，所选单项或批量自定义增加量／+8 |
+| 武器皮肤 | 解锁当前版本已确认目录，保留当前选择与进化等级 | 搜索并逐项解锁、选择当前皮肤／原皮肤、显式选用最高品质 |
 
-编辑目标为识别出的 `game.data`、PlayerPrefs XML、`item_data_<UID>_.data` 与 `statistic_<UID>_.data`。XML 单文件模式支持角色、皮肤及已有宠物键；物品可独立修改，无需 game 或角色 XML。当前物品目录只开放 `AppVersion=80600`，不把默认分片替代 UID 分片。武器独立处理统计分片，需同账号物品分片的 80600 版本核对；快速／专家模式之外的其他 `.data` 可原字节备份和还原；自由编辑另支持逐文件解码导出与重新打包。预览、写前漂移检查、原件备份、写后复读、失败恢复均在应用内实现。选定账号后临时记住存档路径，预览前读取最新内容，修改后自动刷新；手动还原后清空旧目标，重新读取。写回完成后弹出独立结果窗口，显示成功标志；可展开查看成功项与失败原因。写回仍按整笔事务处理，不把失败的事务报告为部分成功。2.0.3 支持本工具 ZIP 导入和备份内文件覆盖还原，不等于完整应用数据恢复。
+编辑目标为识别出的 `game.data`、PlayerPrefs XML、`item_data_<UID>_.data`、`statistic_<UID>_.data` 及 `weapon_evolution_data_<UID>_.data`。XML 单文件模式支持角色、皮肤及已有宠物键；物品可独立修改，无需 game 或角色 XML。物品目录开放整数 `AppVersion=80600`、`80700`，不把默认分片替代 UID 分片。武器获取次数与皮肤分别处理统计、进化分片，均需同账号物品版本核对；皮肤规则见[武器皮肤记录](../weapon-skins-8.7.0.md)。快速／专家模式之外的其他 `.data` 可原字节备份和还原；自由编辑另支持逐文件解码导出与重新打包。预览、写前漂移检查、原件备份、写后复读、失败恢复均在应用内实现。选定账号后临时记住存档路径，预览前读取最新内容，修改后自动刷新；手动还原后清空旧目标，重新读取。写回完成后弹出独立结果窗口，显示成功标志；可展开查看成功项与失败原因。写回仍按整笔事务处理，不把失败的事务报告为部分成功。2.0.3 起支持本工具 ZIP 导入和备份内文件覆盖还原，不等于完整应用数据恢复。
 
-宠物操作只处理映射表中当前账号 XML 已有的 `p<N>_unlock`；若 `game.data` 存在完整的 8.6.0 `petUnlock`，会先核对两侧状态再同步更新。格式或镜像不符时拒绝本次宠物写入。具体见 [alpha08 宠物说明](../quick-pets-alpha08.md)。
+宠物操作只处理映射表中当前账号 XML 已有的 `p<N>_unlock`；若 `game.data` 存在完整的已核对 8.6／8.7 `petUnlock` 顺序，会先核对两侧状态再同步更新。格式或镜像不符时拒绝本次宠物写入。旧规则见 [alpha08 宠物说明](../quick-pets-alpha08.md)，新增映射见 [8.7 适配记录](../compatibility-8.7.0.md)。
 
 物品目录共 573 项，缺失已知 ID 可补入；已有饰品佩戴／图纸／符文保留，两个关联列表仅缺失时补空数组。具体排除项、数量及版本规则见 [alpha06 物品说明](../quick-items-alpha06.md)。
 

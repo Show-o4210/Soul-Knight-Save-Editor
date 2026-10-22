@@ -4,7 +4,8 @@ import kotlinx.serialization.json.JsonObject
 
 data class AccountInspection(
     val characters: Result<Catalog>, val progression: Result<List<HeroProgress>>,
-    val pets: Result<List<PetState>>, val items: Result<JsonObject>, val weapons: Result<List<WeaponState>>
+    val pets: Result<List<PetState>>, val items: Result<JsonObject>, val weapons: Result<List<WeaponState>>,
+    val weaponSkins: Result<WeaponSkinInventory>
 )
 
 /** Independent feature reports from one captured snapshot; no device access and no inferred account fallback. */
@@ -17,10 +18,13 @@ object SaveInspector {
         val pets = runCatching { PetEngine.inspect(snapshot.game?.bytes, requireNotNull(prefs) { "未识别到角色 XML" }.bytes, account) }
         val items = runCatching { ItemEngine.inspect(requireNotNull(EditEngine.item(snapshot, account)) { "没有与此账号对应的物品存档" }.bytes) }
         val weapons = runCatching { EditEngine.weaponStates(snapshot, account) }
-        return AccountInspection(characters, progression, pets, items, weapons)
+        val weaponSkins = runCatching { EditEngine.weaponSkinInventory(snapshot, account) }
+        return AccountInspection(characters, progression, pets, items, weapons, weaponSkins)
     }
 }
 
 fun AssistantState.itemsFor(mode: AssistantMode) = if (mode == AssistantMode.QUICK) itemChoices else expertItems
 fun AssistantState.weaponsFor(mode: AssistantMode) = if (mode == AssistantMode.QUICK)
     WeaponSelection(allPlusEight = choices.quickWeapons) else expertWeapons.selection()
+
+fun AssistantState.weaponSkinsFor(mode: AssistantMode) = if (mode == AssistantMode.QUICK) quickWeaponSkins else expertWeaponSkins

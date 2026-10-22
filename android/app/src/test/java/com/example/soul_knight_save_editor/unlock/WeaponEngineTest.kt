@@ -38,6 +38,27 @@ class WeaponEngineTest {
         assertEquals(8, patch.root.getValue("object2ObtainTime").jsonObject.getValue("weapon_900").jsonPrimitive.int)
         assertEquals(original["StatisticsData"], patch.root["StatisticsData"])
     }
+    @Test fun threeReviewedNamedWeaponsAreAvailableEvenWithoutExistingCounters() {
+        val named = mapOf("weapon_hammerhead" to "锤头鲨", "weapon_lighter" to "遗迹火焰法杖", "weapon_void_hand" to "手骨回旋镖")
+        assertEquals(419, WeaponCatalog.names.size)
+        named.forEach { (id, name) -> assertEquals(name, WeaponCatalog.names[id]) }
+        for (version in listOf(80600, 80700)) {
+            val paired = ItemCodec.encode(buildJsonObject { put("AppVersion", version) })
+            val bytes = encoded(buildJsonObject { put("weapon_hammerhead", 20) })
+            val quick = WeaponEngine.addEight(bytes, paired)
+            val counts = quick.root.getValue("object2ObtainTime").jsonObject
+            assertEquals(JsonPrimitive(28), counts["weapon_hammerhead"])
+            assertEquals(JsonPrimitive(8), counts["weapon_lighter"])
+            assertEquals(JsonPrimitive(8), counts["weapon_void_hand"])
+            val expert = WeaponEngine.edit(bytes, paired, WeaponSelection(increments = named.keys.associateWith { 8 }))
+            assertEquals(setOf("weapon_hammerhead", "weapon_lighter", "weapon_void_hand"), expert.root.getValue("object2ObtainTime").jsonObject.keys)
+            assertEquals(counts.filterKeys { it in named }, expert.root.getValue("object2ObtainTime").jsonObject)
+            assertEquals(original - "object2ObtainTime", expert.root - "object2ObtainTime")
+            assertThrows(IllegalArgumentException::class.java) {
+                WeaponEngine.edit(bytes, paired, WeaponSelection(increments = mapOf("weapon_unconfirmed" to 8)))
+            }
+        }
+    }
     @Test fun malformedCountersAndOverflowRejectTheWholeOperation() {
         for (value in listOf(JsonPrimitive(-1), JsonPrimitive("1"), JsonPrimitive(1.5), JsonPrimitive(true), JsonNull, JsonObject(emptyMap()), JsonPrimitive(Int.MAX_VALUE - 7))) {
             assertThrows(IllegalArgumentException::class.java) { WeaponEngine.addEight(encoded(buildJsonObject { put("weapon_361", value) }), item) }
@@ -51,7 +72,7 @@ class WeaponEngineTest {
     }
     @Test fun unknownGameVersionAndWrongCipherAreRejected() {
         val bytes = StatisticCodec.encode(original)
-        for (version in listOf(JsonPrimitive(90000), JsonPrimitive("80600"), JsonNull)) {
+        for (version in listOf(JsonPrimitive(0), JsonPrimitive(80701), JsonPrimitive(90000), JsonPrimitive("80600"), JsonPrimitive("80700"), JsonNull)) {
             val wrong = ItemCodec.encode(buildJsonObject { put("AppVersion", version) })
             assertThrows(IllegalArgumentException::class.java) { WeaponEngine.inspect(bytes, wrong) }
         }

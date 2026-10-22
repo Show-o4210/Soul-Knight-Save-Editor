@@ -39,7 +39,8 @@ data class ApplyOutcome(
     val failed: List<String>
 )
 data class AssistantState(
-    val packageName: String = "com.ChillyRoom.DungeonShooter",
+    val packageName: String = GameVersions.ORIGINAL,
+    val knownGames: List<GameCandidate> = GameVersions.restore(null),
     val accessBackend: AccessBackend = AccessBackend.NATIVE_ROOT,
     val accessStatus: String = "${accessBackend.label}：尚未检查权限身份及目标目录。",
     val accessDiagnostic: String = "",
@@ -67,6 +68,10 @@ data class AssistantState(
     val expertItems: ItemChoices = ItemChoices(),
     val expertWeapons: WeaponChoices = WeaponChoices(),
     val weaponStates: List<WeaponState> = emptyList(),
+    val weaponSkinInventory: WeaponSkinInventory? = null,
+    val weaponSkinMessage: String = "请先读取武器皮肤存档",
+    val quickWeaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
+    val expertWeaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
     val itemRoot: JsonObject? = null,
     val itemChoices: ItemChoices = ItemChoices(),
     val itemMessage: String = "请先扫描物品存档",
@@ -146,7 +151,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     private val searchCancelled = AtomicBoolean(false)
     var state by mutableStateOf(AssistantState(
         accessBackend = device.backend,
-        packageName = settings.getString("package", "com.ChillyRoom.DungeonShooter")!!,
+        packageName = settings.getString("package", null)?.takeIf(SaveLayout.packagePattern::matches) ?: GameVersions.ORIGINAL,
+        knownGames = GameVersions.restore(settings.getString("knownGameVersions", null), settings.getString("package", null)),
         mode = settings.getString("mode", null)?.let { runCatching { AssistantMode.valueOf(it) }.getOrNull() },
         rememberMode = settings.getBoolean("rememberMode", true),
         personalUseAccepted = settings.getBoolean("personalUseAcceptedV1", false),
@@ -300,10 +306,19 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun packageName(value: String) {
         if (!state.busy) {
             val target = value.trim()
+            require(SaveLayout.packagePattern.matches(target)) { "游戏包名无效" }
             if (target == state.packageName) return
-            settings.edit().putString("package", target).apply()
-            state = state.selectPackage(target).copy(backups = repository.completed(target), originalBackups = repository.exportable(target))
+            if (state.pending.isNotEmpty()) { notice("请先恢复未完成事务，再切换游戏版本。"); return }
+            val games = GameVersions.add(state.knownGames, GameCandidate(target, evidence = emptyList()))
+            settings.edit().putString("package", target).putString("knownGameVersions", GameVersions.encode(games)).apply()
+            state = state.selectPackage(target).copy(knownGames = games,
+                backups = repository.completed(target), originalBackups = repository.exportable(target))
         }
+    }
+    private fun rememberGame(candidate: GameCandidate) {
+        val games = GameVersions.add(state.knownGames, candidate)
+        settings.edit().putString("knownGameVersions", GameVersions.encode(games)).apply()
+        state = state.copy(knownGames = games)
     }
     fun discover() {
         if (state.busy) return
@@ -321,7 +336,11 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                                 val manager = getApplication<Application>().packageManager
                                 manager.getApplicationLabel(manager.getApplicationInfo(candidate.packageName, 0)).toString()
                             }.getOrDefault(candidate.packageName)
-                            viewModelScope.launch { state = state.copy(candidates = state.candidates + candidate.copy(label = label)) }
+                            viewModelScope.launch {
+                                val found = candidate.copy(label = label)
+                                rememberGame(found)
+                                state = state.copy(candidates = state.candidates.filterNot { it.packageName == found.packageName } + found)
+                            }
                         })
                 }
                 state = state.copy(discoveryProgress = progress, discoveryMessage = (if (progress.checked < progress.total) "搜索达到时间上限，已检查 ${progress.checked}/${progress.total} 个应用。" else "搜索完成。") +
@@ -380,6 +399,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val items = report.items
         val pets = report.pets
         val weapons = report.weapons.map { states -> WeaponInfo(states.size, states.count { it.missing }) }
+        val weaponSkins = report.weaponSkins
         val catalog = characters.getOrNull() ?: Catalog(state.accounts, account, emptyList(), true)
         state = state.copy(pinnedTarget = PinnedSaveTarget.from(snapshot, account), progression = report.progression.getOrNull().orEmpty(), weaponStates = report.weapons.getOrNull().orEmpty(), expertItems = if (clearDrafts) ItemChoices() else state.expertItems, expertWeapons = if (clearDrafts) WeaponChoices() else state.expertWeapons, catalog = catalog, petStates = pets.getOrNull().orEmpty(),
             petMessage = if (pets.isFailure) pets.exceptionOrNull()?.message ?: "宠物读取失败"
@@ -388,6 +408,11 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             itemMessage = if (items.isSuccess) "物品已就绪。" else items.exceptionOrNull()?.message ?: "物品读取失败",
             weaponInfo = weapons.getOrNull(),
             weaponMessage = weapons.fold({ "可修改 ${it.total} 把武器的获取次数。" }, { it.message ?: "武器获取次数读取失败" }),
+            weaponSkinInventory = weaponSkins.getOrNull(),
+            weaponSkinMessage = weaponSkins.fold({ "已核对 ${it.states.sumOf { state -> state.skins.size }} 个皮肤 · ${it.states.size} 把武器。" },
+                { it.message ?: "武器皮肤读取失败" }),
+            quickWeaponSkins = if (clearDrafts) WeaponSkinSelection() else state.quickWeaponSkins,
+            expertWeaponSkins = if (clearDrafts) WeaponSkinSelection() else state.expertWeaponSkins,
             preview = null, previewMode = null,
             message = if (characters.isFailure) "角色暂不可用：${characters.exceptionOrNull()?.message}"
                 else "存档已就绪，可以开始编辑。")
@@ -411,6 +436,14 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun expertWeapons(choices: WeaponChoices) {
         if (!state.busy && state.mode == AssistantMode.EXPERT && state.weaponInfo != null)
             state = state.copy(expertWeapons = choices, preview = null, previewMode = null)
+    }
+    fun weaponSkins(selection: WeaponSkinSelection) {
+        if (state.busy || state.weaponSkinInventory == null) return
+        state = when (state.mode) {
+            AssistantMode.QUICK -> state.copy(quickWeaponSkins = selection, preview = null, previewMode = null)
+            AssistantMode.EXPERT -> state.copy(expertWeaponSkins = selection, preview = null, previewMode = null)
+            else -> return
+        }
     }
     fun itemGroup(group: String, undo: Boolean = false) {
         val root = state.itemRoot ?: return
@@ -456,7 +489,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val mode = requireNotNull(state.mode)
         val selection = state.choices.selection(mode, catalog)
         val items = state.itemsFor(mode).selection()
-        val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode)) }
+        val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode), state.weaponSkinsFor(mode)) }
         if (patch.outputs.isEmpty()) state = state.copy(message = "所选内容没有变化，无需写入。")
         else state = state.copy(preview = patch, previewMode = mode)
     }

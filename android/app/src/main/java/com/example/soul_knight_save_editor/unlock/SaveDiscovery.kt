@@ -13,6 +13,7 @@ object SaveDiscovery {
     private val skin = SaveAccountId.skinUnlock
     const val MAX_PACKAGES = 512
     const val MAX_PROBES = 12
+    const val MAX_XML_BYTES = 1_048_576L
     fun packages(output: String, preferred: String, ownPackage: String): List<String> = output.lineSequence()
         .filter { it.startsWith("package:") }.map { it.removePrefix("package:").trim() }
         .filter { packagePattern.matches(it) && it != ownPackage }.distinct()

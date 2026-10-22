@@ -11,11 +11,12 @@ class PetEngineTest {
         <string name="42_p0_unlock">false</string><string name="42_p17_unlock">false</string>
         <string name="42_p55_unlock">False</string><string name="42_p56_unlock">true</string>
         <int name="OpenRijTest_42" value="1"/><string name="unrelated">keep</string>$extra</map>""".toByteArray()
-    private fun game(cat: Boolean = false) = UnlockEngine.xor(buildJsonObject {
+    private fun game(cat: Boolean = false, version: Int = 80600) = UnlockEngine.xor(buildJsonObject {
         put("heroUnlock", buildJsonObject { put("Hero", false) })
         put("skinLock", buildJsonObject { put("Hero", JsonArray(emptyList())) })
         put("petUnlock", buildJsonObject {
-            val ids = PetCatalog.entries.take(17).map { it.id } + "Hide" + PetCatalog.entries.drop(17).map { it.id }
+            val entries = PetCatalog.entries.filter { it.index <= if (version == 80600) 56 else 57 }
+            val ids = entries.take(17).map { it.id } + "Hide" + entries.drop(17).map { it.id }
             ids.forEach { id -> put(id, id == "EscapeMonkey" || id == "Cat" && cat) }
         })
         put("untouched", 29)
@@ -23,10 +24,11 @@ class PetEngineTest {
     private fun rejected(block: () -> Unit) = assertThrows(Exception::class.java) { block() }
 
     @Test fun mappedEntriesExcludeHideAndIncludeNewestPets() {
-        assertEquals(56, PetCatalog.entries.size)
-        assertEquals((0..56).filter { it != 17 }, PetCatalog.entries.map { it.index })
+        assertEquals(57, PetCatalog.entries.size)
+        assertEquals((0..57).filter { it != 17 }, PetCatalog.entries.map { it.index })
         assertEquals("CatMecha", PetCatalog.entries.single { it.index == 55 }.id)
         assertEquals("EscapeMonkey", PetCatalog.entries.single { it.index == 56 }.id)
+        assertEquals(PetDefinition(57, "FishChipKing", "鱼干之王"), PetCatalog.entries.last())
     }
     @Test fun pairedUnlockChangesOnlyExistingMappedEntries() {
         val before = game()
@@ -62,6 +64,58 @@ class PetEngineTest {
         rejected { PetEngine.unlock(game(cat = true), xml(), "42") }
         rejected { PetEngine.unlock(game(), String(xml()).replace(">False</string>", ">unknown</string>").toByteArray(), "42") }
         rejected { PetEngine.unlock(game(), xml(), "99") }
+    }
+    @Test fun bothKnownOrdersUnlockOnlyExistingKeysAndKeepHide() {
+        for (version in listOf(80600, 80700)) {
+            val before = game(version = version)
+            val extra = if (version == 80700) """<string name="42_p57_unlock">false</string>""" else ""
+            val prefs = xml(extra)
+            val patch = PetEngine.unlock(before, prefs, "42")
+            assertTrue(PetEngine.inspect(patch.game, patch.prefs, "42").all { it.unlocked })
+            val old = UnlockEngine.game(before)
+            val updated = UnlockEngine.game(patch.game!!)
+            assertEquals(old - "petUnlock", updated - "petUnlock")
+            assertEquals(old.getValue("petUnlock").jsonObject.keys.toList(), updated.getValue("petUnlock").jsonObject.keys.toList())
+            assertEquals(JsonPrimitive(false), updated.getValue("petUnlock").jsonObject["Hide"])
+            assertEquals(version == 80700, "FishChipKing" in updated.getValue("petUnlock").jsonObject)
+            assertEquals(version == 80700, "42_p57_unlock" in UnlockEngine.prefs(patch.prefs))
+            assertFalse("42_p1_unlock" in UnlockEngine.prefs(patch.prefs))
+        }
+    }
+    @Test fun expertCanSelectFishChipKingWithoutUnlockingOtherPets() {
+        val before = game(version = 80700)
+        val prefs = xml("""<string name="42_p57_unlock">false</string>""")
+        val patch = PetEngine.unlock(before, prefs, "42", setOf("FishChipKing"))
+        val updated = UnlockEngine.game(patch.game!!).getValue("petUnlock").jsonObject
+        assertEquals(JsonPrimitive(true), updated["FishChipKing"])
+        assertEquals(JsonPrimitive(false), updated["Cat"])
+        assertEquals("false", UnlockEngine.prefs(patch.prefs).getValue("42_p0_unlock").textContent)
+        assertEquals(UnlockEngine.game(before).getValue("petUnlock").jsonObject - "FishChipKing", updated - "FishChipKing")
+        rejected { PetEngine.unlock(before, xml(), "42", setOf("FishChipKing")) }
+        rejected { PetEngine.unlock(game(), prefs, "42", setOf("FishChipKing")) }
+        rejected { PetEngine.unlock(before, prefs, "42", setOf("Hide")) }
+        rejected { PetEngine.unlock(before, prefs, "42", setOf("unknown")) }
+    }
+    @Test fun unknownReorderedOrInconsistent87MirrorsStillReject() {
+        val before = UnlockEngine.game(game(version = 80700))
+        val pets = before.getValue("petUnlock").jsonObject
+        val prefs = xml("""<string name="42_p57_unlock">false</string>""")
+        for (invalid in listOf(JsonObject(pets + ("FuturePet" to JsonPrimitive(false))),
+            JsonObject(pets.toList().reversed().toMap()), JsonObject(pets + ("FishChipKing" to JsonPrimitive("false"))),
+            JsonObject(pets + ("FishChipKing" to JsonPrimitive(true))))) {
+            val game = UnlockEngine.xor(JsonObject(before + ("petUnlock" to invalid)).toString().toByteArray())
+            rejected { PetEngine.unlock(game, prefs, "42") }
+        }
+        rejected { PetEngine.unlock(game(version = 80700), xml("""<string name="42_p57_unlock">false</string><string name="99_c0_unlock">false</string>"""), "42") }
+    }
+    @Test fun xmlOnly87MappingNeverCreatesKeysOrTouchesOtherAccounts() {
+        val prefs = xml("""<string name="42_p57_unlock">false</string><string name="99_p57_unlock">false</string>""")
+        val patch = PetEngine.unlock(null, prefs, "42", setOf("FishChipKing"))
+        val nodes = UnlockEngine.prefs(patch.prefs)
+        assertEquals("true", nodes.getValue("42_p57_unlock").textContent)
+        assertEquals("false", nodes.getValue("99_p57_unlock").textContent)
+        assertEquals("false", nodes.getValue("42_p17_unlock").textContent)
+        assertNull(patch.game)
     }
     @Test fun combinedPetCharacterAndItemPreviewUsesOnePlan() {
         val prefs = SaveFile("/prefs.xml", xml(), "1000:1000", "600", "")

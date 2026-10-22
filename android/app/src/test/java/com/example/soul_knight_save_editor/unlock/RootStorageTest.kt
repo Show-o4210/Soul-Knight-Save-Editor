@@ -137,6 +137,45 @@ class RootStorageTest {
         assertTrue(error.uncertainWrite)
     }
 
+    @Test fun discoveryWorksWithoutFindByteSizeSuffixAndBoundsXmlBeforeInspectingIt() {
+        val small = "$root/shared_prefs/valid.xml"
+        val large = "$root/shared_prefs/large.xml"
+        val empty = "$root/shared_prefs/empty.xml"
+        val executor = Executor { request ->
+            check("-size" !in request.command) { "Old Android find rejects byte units" }
+            when {
+                request.command.startsWith("LC_ALL") -> RootCommandResult(0, "directory\n", 1)
+                request.command.startsWith("readlink") -> RootCommandResult(0, request.command.substringAfter("readlink -f '").removeSuffix("'"), 1)
+                request.command.startsWith("find") -> RootCommandResult(0,
+                    if ("shared_prefs" in request.command) "$small\n$large\n$empty\n" else "", 1)
+                request.command.startsWith("stat") -> RootCommandResult(0, when {
+                    small in request.command -> (SaveDiscovery.MAX_XML_BYTES - 1).toString()
+                    large in request.command -> SaveDiscovery.MAX_XML_BYTES.toString()
+                    else -> "0"
+                }, 1)
+                request.command.startsWith("grep") -> RootCommandResult(0, small, 1)
+                else -> error("Unexpected probe command")
+            }
+        }
+        assertEquals(listOf(small), RootStorage(executor).probePaths("com.test.game", 10))
+        assertEquals(1, executor.calls.count { it.command.startsWith("grep") })
+        assertTrue(executor.calls.none { it.writing })
+    }
+
+    @Test fun discoveryDoesNotHidePermissionErrorsBehindItsSizeFilter() {
+        val path = "$root/shared_prefs/valid.xml"
+        val executor = Executor { request -> when {
+            request.command.startsWith("LC_ALL") -> RootCommandResult(0, "directory", 1)
+            request.command.startsWith("readlink") -> RootCommandResult(0, request.command.substringAfter("readlink -f '").removeSuffix("'"), 1)
+            request.command.startsWith("find") -> RootCommandResult(0, path, 1)
+            else -> RootCommandResult(1, "stat: '$path': Permission denied", 1)
+        } }
+        val failure = assertThrows(AccessFailure::class.java) { RootStorage(executor).probePaths("com.test.game", 10) }
+        assertEquals(AccessFailureKind.TARGET_ACCESS_DENIED, failure.kind)
+        assertEquals("检查搜索 XML 大小", failure.diagnostic!!.stage)
+        assertTrue(executor.calls.none { it.command.startsWith("grep") })
+    }
+
     /** Synthetic shell protocol, not an Android process or real privileged command. */
     private class FramedProcess(private val exit: Int = 0, private val wait: CountDownLatch? = null,
         private val disconnect: Boolean = false) : Process() {

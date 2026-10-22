@@ -4,12 +4,14 @@ data class ItemKey(val field: String, val id: String)
 enum class ItemKind { TAPE, QUANTITY, AMOUNT, BLUEPRINT, FACILITY, JEWELRY }
 data class ItemDefinition(val key: ItemKey, val label: String, val kind: ItemKind, val group: String)
 
-/** Reviewed 8.6.0 IDs. Names come from the installed localization table and the 8.3/8.6 ID samples.
+/** Reviewed IDs, retained after checking the 8.7.0 schema against 8.6.0.
+ * Names come from the installed localization table and the 8.3/8.6 ID samples.
  * Contains no account identifiers, inventory quantities or full reference saves.
  * Ambiguous fusion particles, unknown tape names, activity materials and excluded fields are omitted.
  * This is a versioned allowlist, not a claim to cover every item in the game. */
 object ItemCatalog {
-    const val VERSION = 80600
+    // Reviewed item schemas; statistic files use the paired item version too.
+    val SUPPORTED_VERSIONS = setOf(80600, 80700)
     val entries: List<ItemDefinition> = listOf(
         ItemDefinition(ItemKey("materials", "material_tape_airbender_16"), "藏怒燎原", ItemKind.TAPE, "磁带"),
         ItemDefinition(ItemKey("materials", "material_tape_alien"), "超星际旅行", ItemKind.TAPE, "磁带"),
