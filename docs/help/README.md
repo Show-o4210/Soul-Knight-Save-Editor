@@ -9,7 +9,7 @@
 | 每个页面和按钮有什么用 | [图文教学](getting-started.md) |
 | 可以改哪些东西，快速与专家怎么选 | [功能说明与例子](features.md) |
 | 如何保存原件、恢复、安装或升级 | [备份与安装更新](backup-and-update.md) |
-| 导出 `.data`，用外部应用自由编辑后导入 | [自由编辑（2.0.3）](free-editing.md) |
+| 导出 `.data`，用外部应用自由编辑后导入 | [自由编辑逐按钮图解](getting-started.md#free-editing) · [匹配与写入规则](free-editing.md) |
 | 保存多个渠道，保留原版并直接切换 | [游戏版本与渠道](game-versions.md) |
 | 当前版本对 8.7 的适配范围 | [8.7.0 适配与验证记录](../compatibility-8.7.0.md) |
 | 解锁武器皮肤、选择当前皮肤 | [武器皮肤](../weapon-skins-8.7.0.md) |

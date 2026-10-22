@@ -44,7 +44,7 @@
 4. 在角色／物品／武器页勾选或输入，点“预览全部待修改内容”，核对后再点“备份并应用”。
 5. 查看操作结果，再进入游戏核对实际进度。读取、刷新和应用修改会关闭所选游戏，请先退出游戏。
 
-不确定按钮作用时，从[图文教学](docs/help/getting-started.md)开始。找不到存档、按钮不可用或修改未生效时，看[常见问题](docs/help/troubleshooting.md)。旧 alpha／Debug 包与正式包签名不同，更新前先看[备份与安装更新](docs/help/backup-and-update.md)。
+不确定按钮作用时，从[图文教学](docs/help/getting-started.md)开始；[自由编辑图解](docs/help/getting-started.md#free-editing)配有当前虚拟机截图，说明导出、自选外部编辑器、导入冲突和最后的写回预览。找不到存档、按钮不可用或修改未生效时，看[常见问题](docs/help/troubleshooting.md)。旧 alpha／Debug 包与正式包签名不同，更新前先看[备份与安装更新](docs/help/backup-and-update.md)。
 
 ## 测试到什么程度
 

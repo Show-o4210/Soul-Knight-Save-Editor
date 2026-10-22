@@ -8,7 +8,13 @@
 
 - `2.0.4-rc01` / versionCode 25 汇总 dev01–dev03 的游戏列表、视觉调整、8.7 现有功能适配与武器皮肤功能。先推送源码、构建本地 Release 并交付维护者测试；维护者于 2026-10-22 反馈模拟器测试通过，随后授权正式上传 GitHub Release。
 - 发布沿用已测试 APK，不改变版本名、versionCode 或签名，标签为 `v2.0.4-rc01`；同步 README、用户帮助与简介中的 8.7.0 适配和最近测试日期。社区暂未提供独立反馈，维护者反馈未附逐项清单，其他设备与渠道继续收集问题。
-- rc01 的 `testDebugUnitTest assembleRelease lintRelease` 成功，JVM 232 / 232 通过，lint 为 0 errors / 57 warnings；版本与正式签名校验通过。APK SHA-256：`47795a4a9da905d081ab1939cff6d35c96e3bd910a67669a53352cc6839b2c94`。Agent 未在设备安装 rc01 或写真实游戏存档；此前的虚拟机读取／预览检查见下述 dev03 记录，维护者实测反馈见[发布说明](releases/2.0.4-rc01.md)。
+- rc01 的 `testDebugUnitTest assembleRelease lintRelease` 成功，JVM 232 / 232 通过，lint 为 0 errors / 57 warnings；版本与正式签名校验通过。APK SHA-256：`47795a4a9da905d081ab1939cff6d35c96e3bd910a67669a53352cc6839b2c94`。打包发布阶段 Agent 未在设备安装 rc01 或写真实游戏存档；此前的虚拟机读取／预览检查见下述 dev03 记录，维护者实测反馈见[发布说明](releases/2.0.4-rc01.md)。
+
+### 自由编辑图文教学补充（2026-10-22）
+
+- 正式发布后，在现有 Android 9 虚拟机覆盖安装同一份 2.0.4-rc01 / 25，通过 ADB 新增 9 张原始截图，为[“看图认识按钮”自由编辑部分](help/getting-started.md#free-editing)补齐导出、外部应用选择与保存、两种导入方式、哈希／前缀匹配、冲突选择和最后的预览说明；同步专项帮助、首页入口与[配图来源](images/README.md)。
+- 使用仪器测试包内新建的 3 个 `.data` 与演示 XML。外部 MT 编辑器确实保存了导出 JSON，自动生成 `.bak`；额外的冲突版本和未匹配文本仅在导出目录构造。所有操作演示到预览后取消，未应用写入、未启动游戏；4 份演示来源和 34 份游戏 `.data`／XML 的 SHA-256 均不变。
+- 恢复原设置与游戏选择，移除本轮临时文件及新导出记录，保留原有导出记录；仅更新文档和截图，已发布 APK 与标签保持不变。
 
 ## 武器皮肤开发（2.0.4-dev03，已纳入 rc01）
 
