@@ -2,13 +2,13 @@
 
 [用户帮助](help/README.md) · [开发文档索引](development/README.md)
 
-当前最新 Android 正式版为 `v2.0.3` 标签下的 `2.0.3` / versionCode 21，于 2026-10-16（北京时间）发布，增加自由编辑、备份 ZIP 导入和还原、重命名及保留上限。新功能实际流程与游戏内效果交由用户验证，已完成的自动化检查及打包验证见[发布说明](releases/2.0.3.md)。2.0.2 的 Root 双通道与诊断修复继续保留。上一正式版 `2.0.1-rc01` / 17 与 `v1 / 2.0.0` 保留，旧 Python `v1.0.1` 和此前 alpha 预览分别记录。
+当前最新 Android 正式发布版本为 `v2.0.4-rc01` 标签下的 `2.0.4-rc01` / versionCode 25，于 2026-10-22（北京时间）发布。维护者反馈模拟器测试通过，适配元气骑士 8.7.0，保留 8.6.0 支持；沿用已测试签名 APK，GitHub Release 类别为正式版并设为 Latest。新增游戏列表、视觉调整、宠物修复、三把遗漏武器和武器皮肤功能，详见[发布说明](releases/2.0.4-rc01.md)。原有 2.0.3／2.0.2、vivo 修复和 `v1` 等历史附件保留。
 
-## 社区测试候选（2.0.4-rc01，暂不发布 GitHub Release）
+## 2.0.4-rc01 正式发布与模拟器实测（2026-10-22）
 
-- 当前源码版本为 `2.0.4-rc01` / versionCode 25，汇总 dev01–dev03 的游戏列表、视觉调整、8.7 现有功能适配与武器皮肤功能；沿用正式签名，APK 供维护者社区分发测试。
-- 按用户要求先推送源码，再构建本地 Release APK；不创建标签或 GitHub Release，公开下载仍指向 2.0.3。候选内容与反馈要点见[社区测试说明](releases/2.0.4-rc01.md)。
-- rc01 的 `testDebugUnitTest assembleRelease lintRelease` 成功，JVM 232 / 232 通过，lint 为 0 errors / 57 warnings；版本与正式签名校验通过。APK SHA-256：`47795a4a9da905d081ab1939cff6d35c96e3bd910a67669a53352cc6839b2c94`。本轮未在设备安装 rc01，之前的虚拟机读取／预览检查见下述 dev03 记录。真实游戏写回和游戏内效果继续由社区验证。
+- `2.0.4-rc01` / versionCode 25 汇总 dev01–dev03 的游戏列表、视觉调整、8.7 现有功能适配与武器皮肤功能。先推送源码、构建本地 Release 并交付维护者测试；维护者于 2026-10-22 反馈模拟器测试通过，随后授权正式上传 GitHub Release。
+- 发布沿用已测试 APK，不改变版本名、versionCode 或签名，标签为 `v2.0.4-rc01`；同步 README、用户帮助与简介中的 8.7.0 适配和最近测试日期。社区暂未提供独立反馈，维护者反馈未附逐项清单，其他设备与渠道继续收集问题。
+- rc01 的 `testDebugUnitTest assembleRelease lintRelease` 成功，JVM 232 / 232 通过，lint 为 0 errors / 57 warnings；版本与正式签名校验通过。APK SHA-256：`47795a4a9da905d081ab1939cff6d35c96e3bd910a67669a53352cc6839b2c94`。Agent 未在设备安装 rc01 或写真实游戏存档；此前的虚拟机读取／预览检查见下述 dev03 记录，维护者实测反馈见[发布说明](releases/2.0.4-rc01.md)。
 
 ## 武器皮肤开发（2.0.4-dev03，已纳入 rc01）
 

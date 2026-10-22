@@ -38,7 +38,7 @@
 到 [Issues](https://github.com/Show-o4210/Soul-Knight-Save-Editor/issues) 描述具体过程；同类问题已有 Issue 时补充到原问题。可以复制这个模板：
 
 ```text
-助手版本：例如 2.0.3（21）
+助手版本：例如 2.0.4-rc01（25）
 游戏版本与渠道：
 设备／Android 版本：
 Root 管理器、访问方式：原生 Root 或 Shizuku Root
@@ -50,4 +50,4 @@ Root 管理器、访问方式：原生 Root 或 Shizuku Root
 
 不要公开上传完整存档、真实 UID、账号、令牌或备份包。文件名和键名也请先检查个人信息；维护者如确实需要样本，再商定提供方式。
 
-文件修改测试记录为 **2026-10-09**，不是全部设备验收日期。当前 **不保证实际可用**，OnePlus / APatch 等反馈环境仍待用户复测；最新范围见[开发状态](../development-status.md)。
+**最近实测为 2026-10-22，维护者反馈模拟器测试通过，适配元气骑士 8.7.0。** 历史 Root 双通道合成文件专项检查日期为 2026-10-09。这些记录不是全部设备的验收结论，OnePlus / APatch 等反馈环境仍待用户复测；最新范围见[发布说明](../releases/2.0.4-rc01.md)和[开发状态](../development-status.md)。
