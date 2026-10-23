@@ -22,6 +22,10 @@ fun AssistantState.selectPackage(value: String): AssistantState = copy(
     weaponInfo = null, weaponMessage = "请先扫描武器存档",
     weaponSkinInventory = null, weaponSkinMessage = "请先读取武器皮肤存档",
     quickWeaponSkins = WeaponSkinSelection(), expertWeaponSkins = WeaponSkinSelection(),
+    weaponEvolutionInventory = null, weaponEvolutionMessage = "请先读取武器进化存档",
+    quickWeaponEvolution = WeaponEvolutionSelection(), expertWeaponEvolution = WeaponEvolutionSelection(),
+    mythicInventory = null, mythicMessage = "请先读取神话武器存档",
+    quickMythic = MythicSelection(), expertMythic = MythicSelection(),
     preview = null, previewMode = null, itemMessage = "请先扫描物品存档",
     page = AssistantPage.WORKSPACE, workspaceTab = WorkspaceTabs.saves.id,
     message = "已切换目标，请扫描这个版本的本地存档。"
@@ -35,6 +39,10 @@ fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): A
     itemRoot = null, itemChoices = ItemChoices(), expertItems = ItemChoices(), expertWeapons = WeaponChoices(),
     weaponSkinInventory = null, weaponSkinMessage = "请先读取武器皮肤存档",
     quickWeaponSkins = WeaponSkinSelection(), expertWeaponSkins = WeaponSkinSelection(),
+    weaponEvolutionInventory = null, weaponEvolutionMessage = "请先读取武器进化存档",
+    quickWeaponEvolution = WeaponEvolutionSelection(), expertWeaponEvolution = WeaponEvolutionSelection(),
+    mythicInventory = null, mythicMessage = "请先读取神话武器存档",
+    quickMythic = MythicSelection(), expertMythic = MythicSelection(),
     weaponInfo = null, preview = null, previewMode = null, message = message,
     itemMessage = "请先读取存档", weaponMessage = "请先读取存档", petMessage = "请先读取存档"
 )

@@ -53,7 +53,7 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
         stop(packageName, user)
         require(exists(root)) { "未找到所选版本的数据，请切换游戏版本，或扫描全部游戏版本后再读取。" }
         val paths = backupPaths(packageName, user)
-        require(paths.isNotEmpty() && paths.size <= 120) { "没有找到 .data 文件，或文件数量超过当前支持范围" }
+        require(paths.size <= 120) { ".data 文件数量超过当前支持范围" }
         var total = 0L
         fun readBounded(path: String): SaveFile = readBackup(path).also {
             total += it.bytes.size
@@ -62,12 +62,8 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
         val data = paths.map(::readBounded)
         val prefsPaths = list(root, SaveSource.PREFS)
         require(prefsPaths.size <= 128) { "配置文件过多" }
-        val prefs = prefsPaths.map(::readBounded).filter { file ->
-            runCatching {
-                UnlockEngine.prefs(file.bytes).keys.any { key -> key == "OpenRijTest" || key == "OpenNewtonJsonTest" ||
-                    key.startsWith("OpenRijTest_") || key.startsWith("OpenNewtonJsonTest_") } || UnlockEngine.recognizesPrefs(file.bytes)
-            }.getOrDefault(false)
-        }
+        val prefs = prefsPaths.map(::readBounded)
+        require(data.isNotEmpty() || prefs.isNotEmpty()) { "没有找到 .data 或 XML 文件，请先在游戏中生成存档" }
         require(data.size + prefs.size <= 128) { "文件数量超过当前支持范围" }
         val payload = BackupPayload(packageName, user, data + prefs)
         BackupArchive.validate(payload)

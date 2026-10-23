@@ -70,7 +70,8 @@ class FreeEditStore(private val directory: File) {
         }
         require(entries.isNotEmpty() && entries.size <= 128 && entries.map { it.path }.distinct().size == entries.size)
         entries.forEach { entry ->
-            val original = files.single { it.path == entry.path && it.path.endsWith(".data") }
+            val original = files.single { it.path == entry.path && FreeEditEngine.exportable(it) }
+            require(FreeEditEngine.isXml(entry.path) == (entry.codec == FreeCodec.PREFS_XML)) { "自由编辑文件类型不一致" }
             require(UnlockEngine.sha(FreeEditEngine.plain(original, entry.codec)) == entry.plainHash) { "自由编辑对应关系校验失败" }
         }
         return FreeEditSession(id, manifest.getValue("directory").jsonPrimitive.content, snapshot, entries)

@@ -13,6 +13,7 @@ class FreeEditEngineTest {
         FreeCodec.STATISTIC_JSON -> StatisticCodec.encode(value)
         FreeCodec.PLAIN_JSON -> value.toString().toByteArray()
         FreeCodec.RAW -> byteArrayOf(0, -1, 17, 2)
+        FreeCodec.PREFS_XML -> error("XML cases use their original text")
     }
     private fun file(name: String = "game.data", codec: FreeCodec = FreeCodec.GAME_JSON) =
         SaveFile("$root/files/$name", encoded(codec), "10100:10100", "600", "u:object_r:app_data_file:s0")
@@ -22,7 +23,7 @@ class FreeEditEngineTest {
         FreeDocument(name, name, document.bytes.toString(Charsets.UTF_8).replace("\"value\": 1", "\"value\": $value").toByteArray())
 
     @Test fun detectsCodecsWithoutBusinessSchemasOrKnownVersionsAndPreservesUnknownFieldsAndLargeNumbers() {
-        FreeCodec.entries.filter { it != FreeCodec.RAW }.forEach { codec ->
+        FreeCodec.entries.filter { it != FreeCodec.RAW && it != FreeCodec.PREFS_XML }.forEach { codec ->
             val file = file(codec = codec)
             assertEquals(codec, FreeEditEngine.detect(file))
             val (session, documents) = export(file)
@@ -38,7 +39,7 @@ class FreeEditEngineTest {
         }
     }
     @Test fun whitespaceOnlyEditsNeverRewriteEncodedOriginalBytes() {
-        FreeCodec.entries.filter { it != FreeCodec.RAW }.forEach { codec ->
+        FreeCodec.entries.filter { it != FreeCodec.RAW && it != FreeCodec.PREFS_XML }.forEach { codec ->
             val (session, documents) = export(file(codec = codec))
             val doc = documents.single().let { FreeDocument(it.id, it.name, ("\uFEFF  " + original.toString() + "\n").toByteArray()) }
             val plan = FreeEditEngine.plan(session, FreeEditEngine.match(session, listOf(doc)))

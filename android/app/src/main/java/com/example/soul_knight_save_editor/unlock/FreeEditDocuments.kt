@@ -20,7 +20,11 @@ object FreeEditDocuments {
     }
     fun write(context: Context, directory: Uri, documents: List<FreeDocument>): List<Uri> = documents.map { document ->
         val uri = DocumentsContract.createDocument(context.contentResolver, directory,
-            if (document.name.endsWith(".json")) "application/json" else "application/octet-stream", document.name)
+            when {
+                document.name.endsWith(".json") -> "application/json"
+                document.name.endsWith(".xml") -> "application/xml"
+                else -> "application/octet-stream"
+            }, document.name)
             ?: error("无法创建 ${document.name}")
         context.contentResolver.openOutputStream(uri, "w")?.use { it.write(document.bytes) } ?: error("无法导出 ${document.name}")
         val check = context.contentResolver.openInputStream(uri)?.use { readBounded(it, UnlockEngine.MAX_BYTES) } ?: error("无法复读导出文件")

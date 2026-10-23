@@ -6,6 +6,8 @@
 
 2.0.3 的手动还原会将备份 XML 中对应账号已有的 `OpenRijTest`、`OpenNewtonJsonTest` 读取开关设为 0，即使原件值为 1；缺失键不补建，备份原件保持不变。自由编辑写回也处理相关账号已有的读取开关，见[备份说明](backup-and-update.md)与[自由编辑说明](free-editing.md)。
 
+2.0.5-rc01 候选还支持在自由编辑中导出 `shared_prefs/` 现有 XML 原文，修改后导入并写回原 XML，可只选择 XML；对应账号已有读取开关依然强制为 0，其他用户编辑保留。该候选暂未创建 GitHub Release，新增功能的验证范围见[候选说明](../releases/2.0.5-rc01.md)。
+
 ## 已发布 Android 版实际会做什么（2.0.3）
 
 - Root 扫描在**当前 Android 用户**的实际游戏包名下寻找 `files/game.data`（也检查 `files/` 的一层子目录），并在 `shared_prefs/` 寻找含角色或皮肤特征键的 PlayerPrefs XML。`/sdcard/Android/data/` 不属于这次扫描的目标。

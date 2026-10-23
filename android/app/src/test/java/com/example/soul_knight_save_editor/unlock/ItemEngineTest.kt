@@ -13,11 +13,11 @@ class ItemEngineTest {
     private val fish = ItemKey("materials", "material_fish")
 
     @Test fun allowlistMatchesConfirmedScope() {
-        assertEquals(573, ItemCatalog.entries.size)
+        assertEquals(584, ItemCatalog.entries.size)
         assertEquals(ItemCatalog.entries.size, ItemCatalog.byKey.size)
         assertEquals(ItemKind.QUANTITY, ItemCatalog.byKey.getValue(cell).kind)
         assertEquals(6, ItemCatalog.entries.count { it.key.id.startsWith("material_generic_weapon_fragment_") })
-        val excluded = listOf("material_dead_cell", "material_fusion_fragment", "material_ticket_bossrush", "material_c17_book_1", "material_c21_book_2", "material_tape_level_2g.")
+        val excluded = listOf("material_dead_cell", "material_fusion_fragment", "material_ticket_bossrush", "material_tape_level_2g.")
         excluded.forEach { assertFalse(it, ItemCatalog.byKey.containsKey(ItemKey("materials", it))) }
         assertEquals(setOf(fish, ItemKey("materials", "material_ticket"), ItemKey("tokenTickets", "token_hero")), ItemCatalog.ofKind(ItemKind.AMOUNT).map { it.key }.toSet())
         assertTrue(ItemCatalog.entries.all { it.key.field in setOf("materials", "seeds", "tokenTickets", "blueprints", "itemUnlock", "jewelryData") })
@@ -67,7 +67,7 @@ class ItemEngineTest {
         val start = root(",\"blueprints\":{\"$id\":\"Got\",\"future\":\"NewStatus\"}")
         val changed = edit(start, ItemSelection(blueprints = true))
         val entries = changed.root["blueprints"]!!.jsonObject
-        assertEquals(264, entries.size)
+        assertEquals(265, entries.size)
         ItemCatalog.ofKind(ItemKind.BLUEPRINT).forEach { assertEquals(JsonPrimitive("Researched"), entries[it.key.id]) }
         assertEquals(JsonPrimitive("NewStatus"), entries["future"])
         assertTrue(ItemEngine.edit(changed.bytes, ItemSelection(blueprints = true)).changes.isEmpty())
@@ -123,6 +123,77 @@ class ItemEngineTest {
             }
         }
         assertThrows(IllegalArgumentException::class.java) { ItemEngine.inspect(ItemCodec.encode(JsonObject(root() - "AppVersion"))) }
+    }
+    @Test fun reviewedSkillMaterialsAreDistinctFromTrainingPoints() {
+        val expected = linkedMapOf(
+            "material_c17_book_1" to "接引大书", "material_c17_book_2" to "复苏大书",
+            "material_c18_book_1" to "精灵之泪", "material_c18_book_2" to "法力结晶",
+            "material_c20_book_1" to "传承族徽", "material_c20_book_2" to "便携式超时空联系装置",
+            "material_c21_book_1" to "珍藏的番号牌", "material_c21_book_2" to "特别行动令",
+            "material_ancient_weapon_fragment" to "古代武器残页"
+        )
+        val materials = ItemDrafts.groups.getValue("技能与古代武器材料")
+        assertEquals(expected, materials.associate { it.key.id to it.label })
+        assertTrue(materials.all { it.kind == ItemKind.QUANTITY && it.key.field == "materials" })
+        assertEquals(listOf(ItemKey("materials", "material_bp_point")), ItemDrafts.groups.getValue("训练积分").map { it.key })
+        assertEquals("训练积分", ItemCatalog.byKey.getValue(ItemKey("materials", "material_bp_point")).label)
+        assertEquals(241, ItemCatalog.ofKind(ItemKind.QUANTITY).size)
+        assertEquals(264, ItemCatalog.ofKind(ItemKind.BLUEPRINT).size)
+    }
+    @Test fun materialGroupsSupportMissingKeysRepeatUndoAndExplicitZeroOnBothVersions() {
+        val groups = listOf("技能与古代武器材料", "训练积分")
+        for (version in listOf(80600, 80700)) {
+            val start = JsonObject(root(",\"materials\":{\"material_c17_book_1\":7,\"material_bp_point\":12,\"material_dead_cell\":3},\"trainingJourney\":{\"revision\":2,\"period\":9},\"cumulativeFishCount\":3258,\"mythicWeapons\":[{\"id\":1,\"level\":2}]") +
+                ("AppVersion" to JsonPrimitive(version)))
+            var choices = ItemChoices()
+            groups.forEach { group ->
+                choices = ItemDrafts.step(start, choices, group)
+                choices = ItemDrafts.step(start, choices, group)
+                choices = ItemDrafts.step(start, choices, group, undo = true)
+            }
+            val selection = choices.selection()
+            assertEquals(10, selection.increments.size)
+            assertTrue(selection.increments.values.all { it == 1000 })
+            val patch = edit(start, selection)
+            selection.increments.forEach { (key, _) ->
+                assertEquals(ItemEngine.quantity(start, key) + 1000, ItemEngine.quantity(patch.root, key))
+            }
+            assertEquals(start - "materials", patch.root - "materials")
+            assertEquals(JsonPrimitive(3), patch.root.getValue("materials").jsonObject["material_dead_cell"])
+            val zeroes = selection.increments.keys.associateWith { 0 }
+            val cleared = ItemEngine.edit(patch.bytes, ItemSelection(amounts = zeroes))
+            zeroes.keys.forEach { assertEquals(0, ItemEngine.quantity(cleared.root, it)) }
+        }
+    }
+    @Test fun materialGroupFailureDoesNotPartiallyPublishOrMutateItsDraft() {
+        val group = "技能与古代武器材料"
+        val first = ItemDrafts.groups.getValue(group).first().key
+        val choices = ItemChoices(actions = ItemSelection(increments = mapOf(cell to 1000)))
+        for (value in listOf("2147483000", "\"3\"", "-1", "null")) {
+            val start = root(",\"materials\":{\"${first.id}\":$value}")
+            assertThrows(IllegalArgumentException::class.java) { ItemDrafts.step(start, choices, group) }
+            assertEquals(mapOf(cell to 1000), choices.actions.increments)
+        }
+        val points = ItemKey("materials", "material_bp_point")
+        assertThrows(IllegalArgumentException::class.java) {
+            edit(root(",\"materials\":{\"material_bp_point\":2147483647}"), ItemSelection(increments = mapOf(points to 1)))
+        }
+    }
+    @Test fun voidBlueprintSupportsIndividualResearchAndPreservesOtherQualificationFields() {
+        val key = ItemKey("blueprints", "blueprint_weapon_boss_void_origin")
+        assertEquals("湮灭化身 · 蓝图", ItemCatalog.byKey.getValue(key).label)
+        for (version in listOf(80600, 80700)) {
+            for (old in listOf(null, "Got", "Researched")) {
+                val blueprint = if (old == null) "{}" else "{\"${key.id}\":\"$old\"}"
+                val start = JsonObject(root(",\"blueprints\":$blueprint,\"forgeWeapons\":[\"weapon_001\"],\"object2ObtainTime\":{\"weapon_boss_void_origin\":0}") +
+                    ("AppVersion" to JsonPrimitive(version)))
+                val patch = edit(start, ItemSelection(selected = setOf(key)))
+                assertEquals(JsonPrimitive("Researched"), patch.root.getValue("blueprints").jsonObject[key.id])
+                assertEquals(start - "blueprints", patch.root - "blueprints")
+                assertEquals(if (old == "Researched") 0 else 1, patch.changes.size)
+                assertTrue(ItemEngine.edit(patch.bytes, ItemSelection(selected = setOf(key))).changes.isEmpty())
+            }
+        }
     }
     @Test fun privateSampleOfflineRegressionLeavesSourceBytesUntouched() {
         val path = System.getProperty("item.baseline").orEmpty()

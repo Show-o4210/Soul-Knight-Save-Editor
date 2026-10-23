@@ -4,7 +4,8 @@ import kotlinx.serialization.json.*
 
 enum class FreeCodec(val label: String, val extension: String) {
     GAME_JSON("XOR JSON", "json"), ITEM_JSON("物品 DES JSON", "json"), STATISTIC_JSON("统计 DES JSON", "json"),
-    PLAIN_JSON("明文 JSON", "json"), RAW("未识别编码 · 原始字节", "bin")
+    PLAIN_JSON("明文 JSON", "json"), RAW("未识别编码 · 原始字节", "bin"),
+    PREFS_XML("XML 配置 · 保留原文", "xml")
 }
 data class FreeSource(val path: String, val codec: FreeCodec)
 data class FreeEditEntry(val path: String, val name: String, val codec: FreeCodec, val plainHash: String, val account: String?)
@@ -31,10 +32,15 @@ data class FreeImportReview(val matches: List<FreeMatch>, val ignored: List<Stri
 /** Only codecs and file correspondence live here. No item catalog, version or progress rules. */
 object FreeEditEngine {
     private val readingFlag = Regex("^(?:OpenRijTest|OpenNewtonJsonTest)(?:_(${SaveAccountId.TOKEN_PATTERN}))?$")
+    fun isXml(path: String) = path.contains("/shared_prefs/") && path.endsWith(".xml")
+    fun exportable(file: SaveFile) = file.path.endsWith(".data") || isXml(file.path)
+    private fun xmlAccounts(bytes: ByteArray): List<String> {
+        val nodes = UnlockEngine.prefs(bytes)
+        return (UnlockEngine.accounts(bytes) + nodes.keys.mapNotNull { readingFlag.matchEntire(it)?.groupValues?.get(1) }).distinct()
+    }
     fun accounts(snapshot: SaveSnapshot): List<String> = (snapshot.files.flatMap { file ->
         if (!file.path.contains("/shared_prefs/")) listOfNotNull(shardAccount(file.path)) else {
-            val nodes = UnlockEngine.prefs(file.bytes)
-            UnlockEngine.accounts(file.bytes) + nodes.keys.mapNotNull { readingFlag.matchEntire(it)?.groupValues?.get(1) }
+            runCatching { xmlAccounts(file.bytes) }.getOrDefault(emptyList())
         }
     }).distinct().sorted()
     private fun shardAccount(path: String) = EditEngine.itemAccount(path) ?: EditEngine.statisticAccount(path) ?: EditEngine.weaponSkinAccount(path)
@@ -45,8 +51,11 @@ object FreeEditEngine {
         FreeCodec.STATISTIC_JSON -> StatisticCodec.decode(bytes)
         FreeCodec.PLAIN_JSON -> root(bytes)
         FreeCodec.RAW -> error("原始字节没有 JSON 结构")
+        FreeCodec.PREFS_XML -> error("XML 配置没有 JSON 结构")
     }
-    fun detect(file: SaveFile): FreeCodec = FreeCodec.entries.filter { it != FreeCodec.RAW }.firstOrNull {
+    fun detect(file: SaveFile): FreeCodec = if (isXml(file.path)) FreeCodec.PREFS_XML else FreeCodec.entries.filter {
+        it != FreeCodec.RAW && it != FreeCodec.PREFS_XML
+    }.firstOrNull {
         runCatching { decode(file.bytes, it) }.isSuccess
     } ?: FreeCodec.RAW
     // JsonElement's serializer can coerce integer tokens above ULong to Double. Indent the
@@ -74,13 +83,22 @@ object FreeEditEngine {
         }
         return output.toString()
     }
-    fun plain(file: SaveFile, codec: FreeCodec): ByteArray = if (codec == FreeCodec.RAW) file.bytes.copyOf()
-        else pretty(decode(file.bytes, codec)).toByteArray(Charsets.UTF_8).also {
+    private fun validateXml(bytes: ByteArray) {
+        require(bytes.size in 1..UnlockEngine.MAX_BYTES) { "XML 文件为空或超过大小限制" }
+        try { UnlockEngine.prefs(bytes) }
+        catch (error: Exception) { throw IllegalArgumentException("XML 配置格式无效：${error.message}", error) }
+    }
+    fun plain(file: SaveFile, codec: FreeCodec): ByteArray = when (codec) {
+        FreeCodec.RAW -> file.bytes.copyOf()
+        FreeCodec.PREFS_XML -> file.bytes.copyOf().also(::validateXml)
+        else -> pretty(decode(file.bytes, codec)).toByteArray(Charsets.UTF_8).also {
             require(it.size in 1..UnlockEngine.MAX_BYTES) { "解码后的文本过大：${file.path.substringAfterLast('/')}" }
         }
+    }
     fun create(snapshot: SaveSnapshot, selected: Set<String>, account: String?, directory: String): Pair<FreeEditSession, List<FreeDocument>> {
-        require(selected.isNotEmpty()) { "请先选择要导出的 .data 文件" }
-        require(selected.all { path -> snapshot.files.any { it.path == path && path.endsWith(".data") } }) { "导出目标不在当前读取结果中" }
+        require(selected.isNotEmpty()) { "请先选择要导出的 .data 或 XML 文件" }
+        require(selected.all { path -> snapshot.files.any { it.path == path && exportable(it) } }) { "导出目标不在当前读取结果中" }
+        BackupArchive.validate(BackupPayload(snapshot.packageName, snapshot.user, snapshot.files))
         val accounts = accounts(snapshot)
         require(account == null || account in accounts) { "读取开关账号不在当前存档中" }
         val files = snapshot.files.filter { it.path in selected || it.path.contains("/shared_prefs/") }
@@ -90,9 +108,10 @@ object FreeEditEngine {
         val documents = files.filter { it.path in selected }.sortedBy { it.path }.mapIndexed { index, file ->
             val codec = detect(file)
             val bytes = plain(file, codec)
-            val boundAccount = shardAccount(file.path) ?: account ?: accounts.singleOrNull()
-            require(boundAccount != null || accounts.size <= 1) { "请先选择此批文件对应的读取开关账号" }
-            val name = "${index.toString().padStart(3, '0')}_${file.path.substringAfterLast('/')}.${codec.extension}"
+            val boundAccount = if (codec == FreeCodec.PREFS_XML) null else shardAccount(file.path) ?: account ?: accounts.singleOrNull()
+            require(codec == FreeCodec.PREFS_XML || boundAccount != null || accounts.size <= 1) { "请先选择此批文件对应的读取开关账号" }
+            val suffix = if (codec == FreeCodec.PREFS_XML) "" else ".${codec.extension}"
+            val name = "${index.toString().padStart(3, '0')}_${file.path.substringAfterLast('/')}$suffix"
             entries += FreeEditEntry(file.path, name, codec, UnlockEngine.sha(bytes), boundAccount)
             FreeDocument(name, name, bytes)
         }
@@ -105,7 +124,8 @@ object FreeEditEngine {
     }
     private fun nameScore(name: String, entry: FreeEditEntry, full: Boolean): Int {
         val prefix = if (full) entry.name.substringBeforeLast('.') else entry.path.substringAfterLast('/')
-        return listOf(prefix, prefix.removeSuffix(".data")).filter { prefixMatches(name, it) }.maxOfOrNull { it.length } ?: 0
+        val withoutExtension = if (entry.codec == FreeCodec.PREFS_XML) prefix.removeSuffix(".xml") else prefix.removeSuffix(".data")
+        return listOf(prefix, withoutExtension).filter { prefixMatches(name, it) }.maxOfOrNull { it.length } ?: 0
     }
     private fun named(name: String, entries: List<FreeEditEntry>, full: Boolean): List<FreeEditEntry> {
         val scores = entries.associateWith { nameScore(name, it, full) }
@@ -156,7 +176,10 @@ object FreeEditEngine {
             if (document.hash == match.entry.plainHash) return@forEach
             val original = session.snapshot.files.single { it.path == match.entry.path }
             val codec = match.entry.codec
-            val bytes = if (codec == FreeCodec.RAW) document.bytes else {
+            val bytes = if (codec == FreeCodec.RAW) document.bytes else if (codec == FreeCodec.PREFS_XML) {
+                validateXml(document.bytes)
+                document.bytes
+            } else {
                 val edited = root(document.bytes)
                 if (edited == decode(original.bytes, codec)) original.bytes else when (codec) {
                     FreeCodec.GAME_JSON -> UnlockEngine.xor(edited.toString().toByteArray(Charsets.UTF_8))
@@ -164,24 +187,34 @@ object FreeEditEngine {
                     FreeCodec.STATISTIC_JSON -> StatisticCodec.encode(edited)
                     FreeCodec.PLAIN_JSON -> document.bytes
                     FreeCodec.RAW -> error("unreachable")
+                    FreeCodec.PREFS_XML -> error("unreachable")
                 }.also { require(decode(it, codec) == edited) { "重新编码校验失败" } }
             }
             require(bytes.size in 1..UnlockEngine.MAX_BYTES) { "编码后的文件超过大小限制" }
             if (!bytes.contentEquals(original.bytes)) {
                 outputs[original.path] = bytes
                 match.entry.account?.let(affected::add)
+                if (codec == FreeCodec.PREFS_XML) {
+                    affected += xmlAccounts(original.bytes)
+                    affected += xmlAccounts(bytes)
+                }
                 changes += "${document.name} → ${original.path.substringAfterLast('/')}（${match.chosen!!.matchedBy}匹配，${bytes.size} 字节）"
             }
         }
         val flags = mutableListOf<String>()
         if (outputs.isNotEmpty()) session.snapshot.files.filter { it.path.contains("/shared_prefs/") }.forEach { prefs ->
-            var bytes = prefs.bytes
+            // User-edited XML is the base. Applying reading flags to the old original
+            // would otherwise silently discard every imported XML change.
+            var bytes = outputs[prefs.path] ?: prefs.bytes
+            if (affected.isEmpty()) return@forEach
+            // Some SDK preference files have no reading flags; keep their exact bytes.
+            if (runCatching { xmlAccounts(bytes).isEmpty() }.getOrDefault(true)) return@forEach
             affected.forEach { account ->
                 val result = UnlockEngine.localReadingFlags(bytes, account)
                 bytes = result.first
                 flags += result.second
             }
-            if (!bytes.contentEquals(prefs.bytes)) outputs[prefs.path] = bytes
+            if (!bytes.contentEquals(prefs.bytes)) outputs[prefs.path] = bytes else outputs.remove(prefs.path)
         }
         return SavePlan(outputs, changes + flags, mapOf("自由编辑文件" to changes, "读取来源" to flags).filterValues { it.isNotEmpty() })
     }

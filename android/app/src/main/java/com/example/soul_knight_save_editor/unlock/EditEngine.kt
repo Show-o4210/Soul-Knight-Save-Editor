@@ -43,15 +43,21 @@ object EditEngine {
     fun weaponSkinInventory(snapshot: SaveSnapshot, account: String): WeaponSkinInventory = WeaponSkinEngine.inspect(
         requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器皮肤分片" }.bytes,
         requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器皮肤目录版本" }.bytes)
+    fun weaponEvolutionInventory(snapshot: SaveSnapshot, account: String): WeaponEvolutionInventory = WeaponEvolutionEngine.inspect(
+        requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器进化分片" }.bytes,
+        requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器进化目录版本" }.bytes)
+    fun mythicInventory(snapshot: SaveSnapshot, account: String): MythicInventory = MythicEngine.inspect(
+        requireNotNull(item(snapshot, account)) { "没有与此账号对应的物品存档" }.bytes)
     fun hasCharacters(selection: UnlockSelection) = selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.hasProgress || selection.pets || selection.petIds.isNotEmpty()
 
     fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: Boolean = false): SavePlan {
         return preview(snapshot, account, characters, items, WeaponSelection(allPlusEight = weapons))
     }
     fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: WeaponSelection,
-        weaponSkins: WeaponSkinSelection = WeaponSkinSelection()): SavePlan {
+        weaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
+        evolution: WeaponEvolutionSelection = WeaponEvolutionSelection(), mythic: MythicSelection = MythicSelection()): SavePlan {
         require(account in accounts(snapshot)) { "账号不在扫描结果中" }
-        require(hasCharacters(characters) || items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges) { "请先选择要修改的内容" }
+        require(hasCharacters(characters) || items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges || evolution.hasChanges || mythic.hasChanges) { "请先选择要修改的内容" }
         val outputs = linkedMapOf<String, ByteArray>()
         val changes = mutableListOf<String>()
         val sections = linkedMapOf<String, List<String>>()
@@ -77,6 +83,19 @@ object EditEngine {
             val patch = ItemEngine.edit(file.bytes, items)
             outputs[file.path] = patch.bytes
             changes += patch.changes
+        }
+        sections["物品"] = changes.drop(itemStart)
+        val mythicStart = changes.size
+        if (mythic.hasChanges) {
+            val file = requireNotNull(item(snapshot, account)) { "没有与所选账号对应的物品存档" }
+            val patch = MythicEngine.edit(outputs[file.path] ?: file.bytes, mythic)
+            outputs[file.path] = patch.bytes
+            changes += patch.changes
+        }
+        sections["神话武器"] = changes.drop(mythicStart)
+        if (items.hasChanges || mythic.hasChanges) {
+            val file = requireNotNull(item(snapshot, account))
+            val itemRoot = ItemCodec.decode(outputs[file.path] ?: file.bytes)
             snapshot.game?.let { game ->
                 // itemData is optional. Parsing this object does not require legacy role/skin structures.
                 val root = Json.parseToJsonElement(UnlockEngine.utf8(UnlockEngine.xor(outputs[game.path] ?: game.bytes))).jsonObject
@@ -84,15 +103,17 @@ object EditEngine {
                     require(accounts(snapshot).size == 1 && root["itemData"] == ItemCodec.decode(file.bytes)) {
                         "game.data 的物品镜像与当前账号不一致，暂不写入"
                     }
-                    if (root["itemData"] != patch.root) {
-                        val updated = JsonObject(root + ("itemData" to patch.root))
+                    if (root["itemData"] != itemRoot) {
+                        val updated = JsonObject(root + ("itemData" to itemRoot))
                         outputs[game.path] = UnlockEngine.xor(updated.toString().toByteArray(Charsets.UTF_8))
-                        changes += "同步已有的 game.data 物品镜像"
+                        val mirror = "同步已有的 game.data 物品镜像"
+                        changes += mirror
+                        val section = if (mythic.hasChanges) "神话武器" else "物品"
+                        sections[section] = sections[section].orEmpty() + mirror
                     }
                 }
             }
         }
-        sections["物品"] = changes.drop(itemStart)
         val weaponStart = changes.size
         if (weapons.hasChanges) {
             val file = requireNotNull(statistic(snapshot, account)) { "没有与所选账号对应的统计存档" }
@@ -111,7 +132,16 @@ object EditEngine {
             changes += patch.changes
         }
         sections["武器皮肤"] = changes.drop(skinStart)
-        if ((items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges) && !hasCharacters(characters)) snapshot.prefs?.let { prefs ->
+        val evolutionStart = changes.size
+        if (evolution.hasChanges) {
+            val file = requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器进化分片" }
+            val item = requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器进化目录版本" }
+            val patch = WeaponEvolutionEngine.edit(outputs[file.path] ?: file.bytes, item.bytes, evolution)
+            outputs[file.path] = patch.bytes
+            changes += patch.changes
+        }
+        sections["武器进化"] = changes.drop(evolutionStart)
+        if ((items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges || evolution.hasChanges || mythic.hasChanges) && !hasCharacters(characters)) snapshot.prefs?.let { prefs ->
             val (bytes, flags) = UnlockEngine.localReadingFlags(prefs.bytes, account)
             if (flags.isNotEmpty()) outputs[prefs.path] = bytes
             changes += flags

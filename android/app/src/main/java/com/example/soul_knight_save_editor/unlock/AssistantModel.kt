@@ -72,6 +72,14 @@ data class AssistantState(
     val weaponSkinMessage: String = "请先读取武器皮肤存档",
     val quickWeaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
     val expertWeaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
+    val weaponEvolutionInventory: WeaponEvolutionInventory? = null,
+    val weaponEvolutionMessage: String = "请先读取武器进化存档",
+    val quickWeaponEvolution: WeaponEvolutionSelection = WeaponEvolutionSelection(),
+    val expertWeaponEvolution: WeaponEvolutionSelection = WeaponEvolutionSelection(),
+    val mythicInventory: MythicInventory? = null,
+    val mythicMessage: String = "请先读取神话武器存档",
+    val quickMythic: MythicSelection = MythicSelection(),
+    val expertMythic: MythicSelection = MythicSelection(),
     val itemRoot: JsonObject? = null,
     val itemChoices: ItemChoices = ItemChoices(),
     val itemMessage: String = "请先扫描物品存档",
@@ -400,6 +408,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val pets = report.pets
         val weapons = report.weapons.map { states -> WeaponInfo(states.size, states.count { it.missing }) }
         val weaponSkins = report.weaponSkins
+        val evolution = report.weaponEvolution
+        val mythic = report.mythic
         val catalog = characters.getOrNull() ?: Catalog(state.accounts, account, emptyList(), true)
         state = state.copy(pinnedTarget = PinnedSaveTarget.from(snapshot, account), progression = report.progression.getOrNull().orEmpty(), weaponStates = report.weapons.getOrNull().orEmpty(), expertItems = if (clearDrafts) ItemChoices() else state.expertItems, expertWeapons = if (clearDrafts) WeaponChoices() else state.expertWeapons, catalog = catalog, petStates = pets.getOrNull().orEmpty(),
             petMessage = if (pets.isFailure) pets.exceptionOrNull()?.message ?: "宠物读取失败"
@@ -413,6 +423,14 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                 { it.message ?: "武器皮肤读取失败" }),
             quickWeaponSkins = if (clearDrafts) WeaponSkinSelection() else state.quickWeaponSkins,
             expertWeaponSkins = if (clearDrafts) WeaponSkinSelection() else state.expertWeaponSkins,
+            weaponEvolutionInventory = evolution.getOrNull(),
+            weaponEvolutionMessage = evolution.fold({ "已核对 ${it.states.size} 把可进化武器。" }, { it.message ?: "武器进化读取失败" }),
+            quickWeaponEvolution = if (clearDrafts) WeaponEvolutionSelection() else state.quickWeaponEvolution,
+            expertWeaponEvolution = if (clearDrafts) WeaponEvolutionSelection() else state.expertWeaponEvolution,
+            mythicInventory = mythic.getOrNull(),
+            mythicMessage = mythic.fold({ "已核对 ${it.states.size} 把神话武器。" }, { it.message ?: "神话武器读取失败" }),
+            quickMythic = if (clearDrafts) MythicSelection() else state.quickMythic,
+            expertMythic = if (clearDrafts) MythicSelection() else state.expertMythic,
             preview = null, previewMode = null,
             message = if (characters.isFailure) "角色暂不可用：${characters.exceptionOrNull()?.message}"
                 else "存档已就绪，可以开始编辑。")
@@ -442,6 +460,22 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         state = when (state.mode) {
             AssistantMode.QUICK -> state.copy(quickWeaponSkins = selection, preview = null, previewMode = null)
             AssistantMode.EXPERT -> state.copy(expertWeaponSkins = selection, preview = null, previewMode = null)
+            else -> return
+        }
+    }
+    fun weaponEvolution(selection: WeaponEvolutionSelection) {
+        if (state.busy || state.weaponEvolutionInventory == null) return
+        state = when (state.mode) {
+            AssistantMode.QUICK -> state.copy(quickWeaponEvolution = selection, preview = null, previewMode = null)
+            AssistantMode.EXPERT -> state.copy(expertWeaponEvolution = selection, preview = null, previewMode = null)
+            else -> return
+        }
+    }
+    fun mythic(selection: MythicSelection) {
+        if (state.busy || state.mythicInventory == null) return
+        state = when (state.mode) {
+            AssistantMode.QUICK -> state.copy(quickMythic = selection, preview = null, previewMode = null)
+            AssistantMode.EXPERT -> state.copy(expertMythic = selection, preview = null, previewMode = null)
             else -> return
         }
     }
@@ -489,7 +523,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val mode = requireNotNull(state.mode)
         val selection = state.choices.selection(mode, catalog)
         val items = state.itemsFor(mode).selection()
-        val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode), state.weaponSkinsFor(mode)) }
+        val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode), state.weaponSkinsFor(mode),
+            state.weaponEvolutionFor(mode), state.mythicFor(mode)) }
         if (patch.outputs.isEmpty()) state = state.copy(message = "所选内容没有变化，无需写入。")
         else state = state.copy(preview = patch, previewMode = mode)
     }
@@ -597,11 +632,13 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun freeScan() = work {
         require(state.pending.isEmpty()) { "请先恢复未完成事务" }
         val snapshot = withContext(Dispatchers.IO) { device.freeSnapshot(state.packageName, android.os.Process.myUid() / 100000) }
-        val sources = withContext(Dispatchers.Default) { snapshot.files.filter { it.path.endsWith(".data") }.map { FreeSource(it.path, FreeEditEngine.detect(it)) } }
+        val sources = withContext(Dispatchers.Default) { snapshot.files.filter(FreeEditEngine::exportable).map { FreeSource(it.path, FreeEditEngine.detect(it)) } }
         val accounts = withContext(Dispatchers.Default) { FreeEditEngine.accounts(snapshot) }
-        state = state.copy(freeSnapshot = snapshot, freeSources = sources, freeSelected = emptySet(), freeAccounts = accounts,
+        state = state.copy(freeSnapshot = snapshot, freeSources = sources,
+            freeSelected = sources.filter { it.codec == FreeCodec.PREFS_XML }.map { it.path }.toSet(), freeAccounts = accounts,
             freeAccount = accounts.singleOrNull(), freeReview = null,
-            accessStatus = "${device.backend.label}：自由编辑文件读取通过。", message = "已找到 ${sources.size} 个 .data 文件，请选择要导出的文件。")
+            accessStatus = "${device.backend.label}：自由编辑文件读取通过。",
+            message = "已找到 ${sources.count { it.codec != FreeCodec.PREFS_XML }} 个 .data 与 ${sources.count { it.codec == FreeCodec.PREFS_XML }} 个 XML 文件；XML 默认随选中的存档一同导出，也可单独编辑。")
     }
     fun freeSelect(path: String, selected: Boolean) {
         if (!state.busy && state.freeSources.any { it.path == path }) state = state.copy(
@@ -614,7 +651,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         require(state.pending.isEmpty()) { "请先恢复未完成事务" }
         val folder = requireNotNull(state.freeFolder) { "请先选择自由编辑的导出目录" }
         val selected = state.freeSelected.toSet()
-        require(selected.isNotEmpty()) { "请先选择 .data 文件" }
+        require(selected.isNotEmpty()) { "请先选择 .data 或 XML 文件" }
         val exported = withContext(Dispatchers.IO) {
             val snapshot = device.freeSnapshot(state.packageName, android.os.Process.myUid() / 100000)
             val directory = FreeEditDocuments.createDirectory(getApplication(), Uri.parse(folder))

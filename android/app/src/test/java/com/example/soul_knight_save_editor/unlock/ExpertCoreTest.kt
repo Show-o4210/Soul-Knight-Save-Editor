@@ -39,7 +39,7 @@ class ExpertCoreTest {
         assertEquals(ItemSelection(), ItemChoices(amountText = mapOf(cell to " "), incrementText = mapOf(cell to "0")).selection())
     }
     @Test fun quickGroupStepsAreRepeatableUndoableAndAtomicOnFailure() {
-        assertEquals(4, ItemDrafts.groups.size)
+        assertEquals(6, ItemDrafts.groups.size)
         val group = ItemDrafts.groups.entries.first { entries -> entries.value.any { it.key == cell } }
         val once = ItemDrafts.step(itemRoot(), ItemChoices(), group.key)
         val twice = ItemDrafts.step(itemRoot(), once, group.key)

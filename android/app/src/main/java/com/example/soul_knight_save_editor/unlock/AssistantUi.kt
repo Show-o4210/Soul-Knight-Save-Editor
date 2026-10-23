@@ -305,7 +305,8 @@ private val workspaceSections = listOf(
     val quick = renderMode == AssistantMode.QUICK
     val characters = EditEngine.hasCharacters(state.choices.selection(renderMode, catalog))
     val items = state.itemsFor(renderMode).hasChanges
-    val weapons = (if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges) || state.weaponSkinsFor(renderMode).hasChanges
+    val weapons = (if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges) || state.weaponSkinsFor(renderMode).hasChanges ||
+        state.weaponEvolutionFor(renderMode).hasChanges || state.mythicFor(renderMode).hasChanges
     Text("跨页待修改：角色${if (characters) "已选" else "未选"} · 物品${if (items) "已选" else "未选"} · 武器${if (weapons) "已选" else "未选"}",
         style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
     Button(onPreview, enabled = !state.busy && state.pending.isEmpty() && state.personalUseAccepted && state.mode == renderMode &&

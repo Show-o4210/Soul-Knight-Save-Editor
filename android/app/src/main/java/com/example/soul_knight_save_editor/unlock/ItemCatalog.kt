@@ -7,7 +7,9 @@ data class ItemDefinition(val key: ItemKey, val label: String, val kind: ItemKin
 /** Reviewed IDs, retained after checking the 8.7.0 schema against 8.6.0.
  * Names come from the installed localization table and the 8.3/8.6 ID samples.
  * Contains no account identifiers, inventory quantities or full reference saves.
- * Ambiguous fusion particles, unknown tape names, activity materials and excluded fields are omitted.
+ * The reviewed additions (skill books, ancient pages, training points and the void blueprint)
+ * occur in both 8.6.0 / 8.7.0 game_tbitem; skill books are not battle-pass training manuals.
+ * Ambiguous fusion particles, unknown tape names, other activity materials and excluded fields are omitted.
  * This is a versioned allowlist, not a claim to cover every item in the game. */
 object ItemCatalog {
     // Reviewed item schemas; statistic files use the paired item version too.
@@ -74,6 +76,16 @@ object ItemCatalog {
         ItemDefinition(ItemKey("materials", "material_generic_weapon_fragment_3"), "紫色通用武器进化碎片", ItemKind.QUANTITY, "通用进化碎片"),
         ItemDefinition(ItemKey("materials", "material_generic_weapon_fragment_4"), "橙色通用武器进化碎片", ItemKind.QUANTITY, "通用进化碎片"),
         ItemDefinition(ItemKey("materials", "material_generic_weapon_fragment_5"), "红色通用武器进化碎片", ItemKind.QUANTITY, "通用进化碎片"),
+        ItemDefinition(ItemKey("materials", "material_c17_book_1"), "接引大书", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c17_book_2"), "复苏大书", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c18_book_1"), "精灵之泪", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c18_book_2"), "法力结晶", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c20_book_1"), "传承族徽", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c20_book_2"), "便携式超时空联系装置", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c21_book_1"), "珍藏的番号牌", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_c21_book_2"), "特别行动令", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_ancient_weapon_fragment"), "古代武器残页", ItemKind.QUANTITY, "技能与古代武器材料"),
+        ItemDefinition(ItemKey("materials", "material_bp_point"), "训练积分", ItemKind.QUANTITY, "训练积分"),
         ItemDefinition(ItemKey("materials", "material_battery"), "电池", ItemKind.QUANTITY, "材料"),
         ItemDefinition(ItemKey("materials", "material_cell"), "生物质", ItemKind.QUANTITY, "材料"),
         ItemDefinition(ItemKey("materials", "material_fertilize"), "肥料", ItemKind.QUANTITY, "材料"),
@@ -511,6 +523,7 @@ object ItemCatalog {
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_413"), "元气弹发射器 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_415"), "怪物压缩器 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_416"), "刀刀烈火 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
+        ItemDefinition(ItemKey("blueprints", "blueprint_weapon_boss_void_origin"), "湮灭化身 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_bossrushfinal"), "封灵战锤 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_bossrushfinalA"), "魂刃:英魂 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),
         ItemDefinition(ItemKey("blueprints", "blueprint_weapon_bossrushfinalB"), "魂刃:魔魂 · 蓝图", ItemKind.BLUEPRINT, "蓝图"),

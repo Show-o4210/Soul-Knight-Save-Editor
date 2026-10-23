@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
     var showExports by remember(session?.id) { mutableStateOf(false) }
     LazyColumn(modifier.testTag("free-edit-page"), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
         item { Panel("自由编辑") {
-            Text("解码导出 → 选择外部应用编辑 → 导入并打包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("导出 .data 与 XML → 外部应用编辑 → 导入写回", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("仅检查格式与编码，不修正字段、镜像或分片关系。自行修改造成的游戏内异常由用户承担；写入前会自动备份。", style = MaterialTheme.typography.bodySmall)
             Text(state.packageName, style = MaterialTheme.typography.labelSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
             Text(state.freeFolder?.let { BackupDestination.label(Uri.parse(it)) } ?: "请选择一个供外部应用编辑的本地目录。")
             OutlinedButton(chooseFolder, enabled = !state.busy) { Text(if (state.freeFolder == null) "选择导出目录" else "更换导出目录") }
             Text("每次导出创建独立子目录，随后弹出应用选择器。可选择文件管理器或逐文件选择编辑应用。", style = MaterialTheme.typography.bodySmall)
+            Text("XML 默认勾选，按原文导出为 .xml；导入后写回原配置文件。仅检查 XML 格式，已有本地读取开关会设为 0。", style = MaterialTheme.typography.bodySmall)
             if (state.freeAccounts.size > 1) {
                 Text("无账号文件名的分片，使用以下账号的本地读取开关：", style = MaterialTheme.typography.bodySmall)
                 state.freeAccounts.forEach { account ->
@@ -48,14 +49,16 @@ import androidx.compose.ui.unit.dp
             }
             if (state.freeSources.isNotEmpty()) {
                 TextButton({ showSources = !showSources }) { Text(if (showSources) "收起待导出文件" else "选择下一次导出文件") }
-                TextButton({ state.freeSources.forEach { model.freeSelect(it.path, true) } }, enabled = !state.busy) { Text("全选 .data 文件") }
+                TextButton({ state.freeSources.forEach { model.freeSelect(it.path, true) } }, enabled = !state.busy) { Text("全选 .data 与 XML") }
                 TextButton({ state.freeSources.forEach { model.freeSelect(it.path, false) } }, enabled = !state.busy) { Text("清空选择") }
                 Button(model::freeExport, enabled = !state.busy && state.pending.isEmpty() && state.freeFolder != null && state.freeSelected.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth().testTag("free-export")) { Text("解码并导出 ${state.freeSelected.size} 个文件") }
             }
         } }
         if (showSources) items(state.freeSources, key = { "source:${it.path}" }) { source -> Panel {
-            CheckLine(source.path.substringAfter("/files/"), source.path in state.freeSelected, !state.busy) { model.freeSelect(source.path, it) }
+            val label = if (source.codec == FreeCodec.PREFS_XML) "shared_prefs/${source.path.substringAfterLast('/')}"
+                else "files/${source.path.substringAfter("/files/")}"
+            CheckLine(label, source.path in state.freeSelected, !state.busy) { model.freeSelect(source.path, it) }
             Text(source.codec.label, style = MaterialTheme.typography.bodySmall)
         } }
         if (session == null && model.canResumeFree()) item { Panel {

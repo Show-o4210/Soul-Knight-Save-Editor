@@ -104,7 +104,25 @@ class Version87CompatibilityTest {
         val expertSkins = WeaponSkinEngine.inspect(output(expert, skinFile), item.bytes)
         assertEquals(2, expertSkins.states.single { it.weapon == "weapon_007" }.current)
         assertEquals(originalSkins.states.filter { it.weapon != "weapon_007" }, expertSkins.states.filter { it.weapon != "weapon_007" })
-        for (plan in listOf(quick, expert)) {
+        val allFeatures = EditEngine.preview(snapshot, account, UnlockSelection(), ItemSelection(blueprints = true,
+            increments = ItemCatalog.ofKind(ItemKind.QUANTITY).associate { it.key to 1000 }), WeaponSelection(),
+            WeaponSkinSelection(unlockAll = true), WeaponEvolutionSelection(allMax = true), MythicSelection(maxAll = true))
+        val evolved = WeaponEvolutionEngine.inspect(output(allFeatures, skinFile), item.bytes)
+        assertEquals(121, evolved.states.size)
+        assertTrue(evolved.states.all { it.error == null && it.level!! >= 1 })
+        val finalMythics = MythicEngine.inspect(output(allFeatures, item))
+        assertEquals(28, finalMythics.states.size)
+        assertTrue(finalMythics.states.all { it.error == null && it.level!! >= 3 })
+        val allItem = ItemCodec.decode(output(allFeatures, item))
+        val allFields = setOf("materials", "seeds", "tokenTickets", "blueprints", "mythicWeapons")
+        assertEquals(oldItem.filterKeys { it !in allFields }, allItem.filterKeys { it !in allFields })
+        assertEquals(JsonPrimitive("Researched"), allItem.getValue("blueprints").jsonObject["blueprint_weapon_boss_void_origin"])
+        val allSkins = WeaponSkinEngine.inspect(output(allFeatures, skinFile), item.bytes)
+        assertTrue(allSkins.states.all { state -> state.skins.all { it.id in state.unlocked } })
+        originalSkins.states.filterNot { it.missing }.forEach { original ->
+            assertEquals(original.current, allSkins.states.single { it.weapon == original.weapon }.current)
+        }
+        for (plan in listOf(quick, expert, allFeatures)) {
             assertTrue(plan.outputs.keys.all { it in snapshot.files.map { file -> file.path } })
             for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
                 val key = "${flag}_$account"

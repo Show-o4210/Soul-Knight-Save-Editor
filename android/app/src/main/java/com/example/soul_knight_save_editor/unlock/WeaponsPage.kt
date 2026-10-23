@@ -1,6 +1,8 @@
 package com.example.soul_knight_save_editor.unlock
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -13,20 +15,47 @@ import androidx.compose.ui.unit.dp
 
 @Composable internal fun WeaponsPage(model: AssistantModel, mode: AssistantMode, modifier: Modifier) {
     WeaponContent(model.state, mode, modifier, { model.tab(WorkspaceTabs.saves) }, model::weapons,
-        model::preview, model::requestConsent, { model.page(AssistantPage.BACKUPS) }, model::expertWeapons, model::weaponSkins)
+        model::preview, model::requestConsent, { model.page(AssistantPage.BACKUPS) }, model::expertWeapons, model::weaponSkins,
+        model::weaponEvolution, model::mythic)
 }
 
 @Composable internal fun WeaponContent(state: AssistantState, mode: AssistantMode, modifier: Modifier = Modifier,
     onSaves: () -> Unit, onSelect: (Boolean) -> Unit, onPreview: () -> Unit, onConsent: () -> Unit, onBackups: () -> Unit,
-    onExpert: (WeaponChoices) -> Unit = {}, onSkins: (WeaponSkinSelection) -> Unit = {}) {
-    var skins by rememberSaveable { mutableStateOf(false) }
+    onExpert: (WeaponChoices) -> Unit = {}, onSkins: (WeaponSkinSelection) -> Unit = {},
+    onEvolution: (WeaponEvolutionSelection) -> Unit = {}, onMythic: (MythicSelection) -> Unit = {}) {
+    var section by rememberSaveable { mutableStateOf(0) }
     Column(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FilterChip(!skins, { skins = false }, label = { Text("获取次数") }, modifier = Modifier.testTag("weapon-counts-tab"))
-            FilterChip(skins, { skins = true }, label = { Text("武器皮肤") }, modifier = Modifier.testTag("weapon-skins-tab"))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FilterChip(section == 0, { section = 0 }, label = { Text("获取次数") }, modifier = Modifier.testTag("weapon-counts-tab"))
+            FilterChip(section == 1, { section = 1 }, label = { Text("武器皮肤") }, modifier = Modifier.testTag("weapon-skins-tab"))
+            FilterChip(section == 2, { section = 2 }, label = { Text("武器进化") }, modifier = Modifier.testTag("weapon-evolution-tab"))
+            FilterChip(section == 3, { section = 3 }, label = { Text("神话武器") }, modifier = Modifier.testTag("mythic-weapons-tab"))
         }
-        if (skins) WeaponSkinContent(state, mode, Modifier.weight(1f), onSaves, onPreview, onConsent, onBackups, onSkins)
-        else WeaponObtainContent(state, mode, Modifier.weight(1f), onSaves, onSelect, onPreview, onConsent, onBackups, onExpert)
+        when (section) {
+            1 -> WeaponSkinContent(state, mode, Modifier.weight(1f), onSaves, onPreview, onConsent, onBackups, onSkins)
+            2, 3 -> Column(Modifier.weight(1f)) {
+                LazyColumn(Modifier.weight(1f).testTag("weapon-upgrades-list"), verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 14.dp)) {
+                    item { Status(state) }
+                    if (state.catalog == null) item { Panel {
+                        Text("请先读取存档。")
+                        OutlinedButton(onSaves, enabled = !state.busy) { Text("前往存档") }
+                    } }
+                    if (state.pending.isNotEmpty()) item { Panel {
+                        Text("有未完成的写回，请先恢复")
+                        Button(onBackups, enabled = !state.busy) { Text("前往备份与恢复") }
+                    } }
+                    item {
+                        if (section == 2) WeaponEvolutionContent(state.weaponEvolutionInventory, state.weaponEvolutionFor(mode),
+                            mode, state.busy, state.weaponEvolutionMessage, onEvolution)
+                        else MythicContent(state.mythicInventory, state.mythicFor(mode), mode, state.busy, state.mythicMessage, onMythic)
+                    }
+                    if (!state.personalUseAccepted) item { TextButton(onConsent) { Text("先确认个人使用约定") } }
+                }
+                PendingEdits(state, mode, onPreview)
+            }
+            else -> WeaponObtainContent(state, mode, Modifier.weight(1f), onSaves, onSelect, onPreview, onConsent, onBackups, onExpert)
+        }
     }
 }
 
