@@ -2,7 +2,7 @@
 
 [开发文档索引](README.md) · [用户帮助](../help/README.md)
 
-当前源码为正式发布的 **`2.0.5-rc02` / versionCode 27**，标签 `v2.0.5-rc02`。新增武器进化、神话武器、XML 自由编辑与重新锁定，修复游戏运行时访问、光速 Root 和 B 站新格式存档。2026-10-23 模拟器测试通过，适配元气骑士 8.7.0，保留 8.6.0 支持；沿用已测 APK 与正式签名：[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc02/SoulKnightSaveEditor-2.0.5-rc02.apk) · [发布说明](../releases/2.0.5-rc02.md)。原生 Root 继续默认。
+当前源码为正式发布的 **`2.0.5-rc03` / versionCode 28**，标签 `v2.0.5-rc03`。普通 `su` 优先，仅确认 Magisk 且目标目录不可见时启用全局挂载备用；原版、B 站、vivo 与其他渠道各自维护查找表，路径安全与编码继续共用。2026-10-23 正式签名包通过 Pixel 6 原生读取／刷新及光速普通 Root 读取回归，适配元气骑士 8.7.0，保留 8.6.0 支持：[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc03/SoulKnightSaveEditor-2.0.5-rc03.apk) · [发布说明](../releases/2.0.5-rc03.md)。原生 Root 继续默认，Shizuku 实现保持原规则。
 
 开发阶段 `2.0.3-dev01` / versionCode 19（已纳入 2.0.3），增加 ZIP 导入／限定范围还原、备份重命名、递增编号与保留上限。版本号递增也使 Shizuku UserService 加载更新后的文件范围规则。还原新建独立事务，原件及其 SHA-256 不改；自动故障恢复继续按原事务检查，详情见[备份说明](../help/backup-and-update.md)。
 

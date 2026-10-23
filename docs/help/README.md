@@ -1,6 +1,6 @@
 # 用户帮助
 
-[项目首页](../../README.md) · [下载 Android APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc02/SoulKnightSaveEditor-2.0.5-rc02.apk)
+[项目首页](../../README.md) · [下载 Android APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc03/SoulKnightSaveEditor-2.0.5-rc03.apk)
 
 第一次用，按“安装 → 读取 → 备份 → 准备修改 → 预览 → 应用”阅读[图文教学](getting-started.md)。只想查一个问题，可以从下面直接进入。
 
@@ -13,10 +13,10 @@
 | 保存多个渠道，保留原版并直接切换 | [游戏版本与渠道](game-versions.md) |
 | 当前版本对 8.7 的适配范围 | [8.7.0 适配与验证记录](../compatibility-8.7.0.md) |
 | 解锁武器皮肤、选择当前皮肤 | [武器皮肤](../weapon-skins-8.7.0.md) |
-| 2.0.5 的进化、神话武器与 XML 自由编辑 | [本版发布说明](../releases/2.0.5-rc02.md) · [功能说明](features.md#205-新增功能) |
+| 本版 Magisk 读取修复与 2.0.5 功能 | [本版发布说明](../releases/2.0.5-rc03.md) · [功能说明](features.md#205-新增功能) |
 | 授权了仍读不到、按钮灰色、修改未生效 | [常见问题与反馈](troubleshooting.md) |
 | `.data.new`、读取开关、重新同步云存档 | [本地读取说明](local-data-reading.md) |
 
-当前正式发布版本为 Android **2.0.5-rc02**，适配 **元气骑士 8.7.0**，保留 8.6.0 支持。**最近实测：2026-10-23，模拟器测试通过。** 社区暂未提供独立复测反馈，其他设备与渠道仍需分别验证。界面配图摄于 **2026-10-10／2026-10-22**，保留旧版演示界面；原生 Root／Shizuku Root 合成文件双通道专项检查日期为 **2026-10-09**。详细范围见[发布说明](../releases/2.0.5-rc02.md)和[开发状态](../development-status.md)。开发者入口见[开发文档](../development/README.md)。
+当前正式发布版本为 Android **2.0.5-rc03**，适配 **元气骑士 8.7.0**，保留 8.6.0 支持。**最近实测：2026-10-23，Pixel 6 原生读取／刷新和光速普通 Root 读取通过。** 其他设备与渠道仍需分别验证。界面配图摄于 **2026-10-10／2026-10-22**，保留旧版演示界面；原生 Root／Shizuku Root 合成文件双通道专项检查日期为 **2026-10-09**。详细范围见[发布说明](../releases/2.0.5-rc03.md)和[开发状态](../development-status.md)。开发者入口见[开发文档](../development/README.md)。
 
-本版包含蓝图与材料、普通武器进化、神话武器、XML 自由编辑、重新锁定与 `.data.new` 支持。B 站 8.7 已验证材料修改生效、未选材料保留；光速虚拟机已验证原生 Root／Shizuku Root 读取。
+本版包含蓝图与材料、普通武器进化、神话武器、XML 自由编辑、重新锁定与 `.data.new` 支持。B 站 8.7 已验证材料修改生效、未选材料保留；本版增加 Magisk 全局挂载备用，并回归光速普通 Root 读取；Shizuku Root 读取记录来自 rc02。

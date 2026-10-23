@@ -2,7 +2,7 @@
 
 《元气骑士》本地存档编辑工具，可修改角色、皮肤、物品与武器数据，支持修改预览、备份和还原。
 
-**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc02/SoulKnightSaveEditor-2.0.5-rc02.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
+**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc03/SoulKnightSaveEditor-2.0.5-rc03.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
 
 ## 使用要求
 
@@ -14,9 +14,9 @@
 | 存档访问 | 默认使用原生 Root，也可使用通过 Root 启动的 Shizuku；不支持 Shizuku 的 ADB 模式 |
 | 游戏版本 | 适配 8.7.0，保留 8.6.0 支持；其他版本与渠道需单独验证 |
 
-当前 Android 版本：**`2.0.5-rc02`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
+当前 Android 版本：**`2.0.5-rc03`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
 
-本版新增武器进化、神话武器、重新锁定与 XML 自由编辑，修复光速虚拟机读取及 B 站服新格式材料修改。**最近实测：2026-10-23，模拟器测试通过，适配 8.7.0。** 具体变动见[发布说明](docs/releases/2.0.5-rc02.md)。
+本版修复 Pixel 6 原生 Magisk 的目录不可见问题：普通 `su` 优先，必要时自动使用全局挂载备用；分离各渠道查找策略。**最近实测：2026-10-23，Pixel 6 读取／刷新及光速虚拟机普通 Root 读取通过，适配 8.7.0。** 具体变动见[发布说明](docs/releases/2.0.5-rc03.md)。
 
 **修改前请先备份原始存档，并保存到助手以外的文件夹。** 从旧 alpha / Debug 包升级时，请先阅读[备份与更新](docs/help/backup-and-update.md)，避免签名不同导致无法覆盖安装。
 
@@ -44,7 +44,7 @@
 | 武器进化与神话武器 | 普通武器进化；神话武器解锁、升级至 3 级 |
 | 备份与还原 | 手动 / 自动备份、ZIP 导入、原件还原和重命名；默认不限数量，可设置保留上限 |
 
-可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步。本版支持 `.data.new` 的扫描、备份与读写，以及 B 站服读取开关的账号绑定，详见[发布说明](docs/releases/2.0.5-rc02.md)。
+可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步。支持 `.data.new` 的扫描、备份与读写，以及 B 站服读取开关的账号绑定，详见[2.0.5-rc02 说明](docs/releases/2.0.5-rc02.md)。
 
 ### 第一次使用
 
@@ -75,12 +75,12 @@
 | 项目 | 已有记录 |
 | --- | --- |
 | 游戏渠道 | **vivo 渠道 8.6.0**：用户反馈角色、皮肤解锁成功；**B 站服 8.7.0**：2026-10-23 原生 Root 实测材料修改生效，未选材料保留 |
-| 虚拟机 / 模拟器 | **Android 9 虚拟机**：完成 B 站 8.7 材料实际写回与游戏内核对；**光速 Android 7.1.2**：原生 Root、Shizuku Root 均通过读取，未验收真实游戏写回 |
-| 武器进化与神话武器 | **2026-10-23**，维护者确认在虚拟机验收通过；其他条目和设备渠道继续收集反馈，详见[本版说明](docs/releases/2.0.5-rc02.md) |
-| Root 方式 | **原生 Root（Magisk）**与**通过 Root 启动的 Shizuku**：均通过测试文件读写、备份和恢复检查；该项未涉及真实游戏存档写回 |
-| Android 系统 | 已有 **Android 7.1.2** 读取、**Android 9** 真实存档修改与 **Android 16** Pixel 6 测试文件检查记录；Android 7.0 及以上为最低要求，不代表每个版本均已实测 |
+| 虚拟机 / 模拟器 | **Android 9 虚拟机**：完成 B 站 8.7 材料实际写回与游戏内核对；**光速 Android 7.1.2**：rc03 普通 Root 读取通过；rc02 另有 Shizuku Root 读取记录，未验收真实游戏写回 |
+| 武器进化与神话武器 | **2026-10-23**，维护者确认在虚拟机验收通过；其他条目和设备渠道继续收集反馈，详见[2.0.5-rc02 说明](docs/releases/2.0.5-rc02.md) |
+| Root 方式 | **Pixel 6 / Android 16 / Magisk**：rc03 正式界面读取与刷新通过，48 份存档相关文件哈希未变；历史两通道测试文件读写、备份与恢复检查保留 |
+| Android 系统 | 已有 **Android 7.1.2** 读取、**Android 9** 真实存档修改与 **Android 16** Pixel 6 实际存档读取／刷新记录；Android 7.0 及以上为最低要求，不代表每个版本均已实测 |
 
-以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[版本发布说明](docs/releases/2.0.5-rc02.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
+以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[版本发布说明](docs/releases/2.0.5-rc03.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
 
 ## 文档与反馈
 
@@ -90,7 +90,7 @@
 | 备份、还原与安装更新 | [备份与更新](docs/help/backup-and-update.md) |
 | 自由编辑文件 | [自由编辑](docs/help/free-editing.md) · [图文教程](docs/help/getting-started.md#free-editing) |
 | 游戏版本与存档读取 | [版本选择](docs/help/game-versions.md) · [本地读取](docs/help/local-data-reading.md) |
-| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc02.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
+| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc03.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
 | 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) |
 | Python 桌面版 | [使用说明](desktop/README.md)，功能与 Android 版分别维护 |
 

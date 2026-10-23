@@ -1,12 +1,15 @@
 package com.example.soul_knight_save_editor.unlock
 
-/** Register supported sources once; discovery, scanning and account binding share these names. */
-enum class SaveSource(val directory: String, val depth: Int, val glob: String, val filename: Regex) {
-    GAME("files", 2, "game.data", Regex("^game\\.data$")),
-    ITEM("files", 2, "item_data*.data*", Regex("^item_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
-    STATISTIC("files", 2, "statistic*.data*", Regex("^statistic(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
-    PREFS("shared_prefs", 1, "*.xml", Regex("^[a-zA-Z0-9_.-]+\\.xml$")),
-    WEAPON_SKINS("files", 2, "weapon_evolution_data*.data*", Regex("^weapon_evolution_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$"))
+/** Stable source identities (also used by Shizuku IPC), with shared strict recognition syntax. */
+enum class SaveSource(val filename: Regex) {
+    GAME(Regex("^game\\.data$")),
+    ITEM(Regex("^item_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
+    STATISTIC(Regex("^statistic(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
+    PREFS(Regex("^[a-zA-Z0-9_.-]+\\.xml$")),
+    WEAPON_SKINS(Regex("^weapon_evolution_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$"));
+
+    /** Canonical source namespace, also used when constructing synthetic/local snapshots. */
+    val directory: String get() = if (this == PREFS) "shared_prefs" else "files"
 }
 
 object SaveLayout {
@@ -17,7 +20,7 @@ object SaveLayout {
     val backupDataPath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+$DATA_SUFFIX$")
     val restorablePath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+$DATA_SUFFIX|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
     val packagePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
-    private val dataNames = SaveSource.entries.filter { it.directory == "files" }
+    private val dataNames = SaveSource.entries.filter { it != SaveSource.PREFS }
         .joinToString("|") { it.filename.pattern.removePrefix("^").removeSuffix("$") }
     val editablePath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files(?:/[a-zA-Z0-9_.-]+)?/(?:$dataNames)|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
     fun account(path: String, source: SaveSource): String? {
@@ -32,6 +35,7 @@ object SaveLayout {
 
 /** Transport supplies bounded directory listings and verified reads; scanner owns recognition policy. */
 interface SaveScanAccess {
+    fun searchStrategy(packageName: String): ChannelSearchStrategy = ChannelSearchStrategies.forPackage(packageName)
     /** Legacy name: require no target processes; never force-stop the game. */
     fun stop(packageName: String, user: Int)
     fun exists(directory: String): Boolean
@@ -55,13 +59,15 @@ data class PinnedSaveTarget(val packageName: String, val user: Int, val account:
 
 object SaveScanner {
     /** Re-read exactly the chosen locations. Missing or changed identity requires an explicit new scan. */
-    fun refresh(access: SaveScanAccess, target: PinnedSaveTarget): SaveSnapshot {
+    fun refresh(access: SaveScanAccess, target: PinnedSaveTarget,
+        strategy: ChannelSearchStrategy = access.searchStrategy(target.packageName)): SaveSnapshot {
         val root = SaveLayout.root(target.packageName, target.user)
         val paths = listOfNotNull(target.prefs, target.game) + target.items + target.statistics + target.weaponSkins
         require(paths.isNotEmpty() && paths.size <= 128 && paths.distinct().size == paths.size) { "存档位置记录无效，请重新查找" }
         fun validate(path: String, source: SaveSource) {
-            require(path.startsWith("$root/${source.directory}/") && !path.contains("..") && SaveLayout.editablePath.matches(path) &&
-                source.filename.matches(path.substringAfterLast('/')) && path.removePrefix("$root/${source.directory}/").split('/').size <= source.depth) { "存档位置不属于当前版本，请重新查找" }
+            val query = strategy.source(source)
+            require(query.containsPath(root, path) && SaveLayout.editablePath.matches(path) &&
+                source.filename.matches(path.substringAfterLast('/')) && query.matchesFilename(path.substringAfterLast('/'))) { "存档位置不属于当前版本，请重新查找" }
         }
         target.prefs?.let { validate(it, SaveSource.PREFS) }
         target.game?.let { validate(it, SaveSource.GAME) }
@@ -76,7 +82,10 @@ object SaveScanner {
             SaveSource.WEAPON_SKINS to target.weaponSkins).forEach { (source, pinned) ->
             val listed = access.list(root, source)
             require(listed.size <= 128 && listed.distinct().size == listed.size) { "当前候选文件过多或重复，请重新查找" }
-            val found = listed.filter { source.filename.matches(it.substringAfterLast('/')) }.onEach { validate(it, source) }
+            val query = strategy.source(source)
+            val found = listed.filter { source.filename.matches(it.substringAfterLast('/')) }.onEach { path ->
+                require(query.containsPath(root, path) && SaveLayout.editablePath.matches(path)) { "存档位置不属于当前版本，请重新查找" }
+            }.filter { query.matchesFilename(it.substringAfterLast('/')) }
                 .filter { SaveLayout.account(it, source) == target.account }.toSet()
             val expected = pinned.filter { SaveLayout.account(it, source) == target.account }.toSet()
             require(found == expected) { "所选账号的存档位置或新旧格式已变化，请重新查找后再编辑" }
@@ -88,19 +97,19 @@ object SaveScanner {
         require(target.account in EditEngine.accounts(snapshot)) { "存档账号已改变，请重新查找" }
         return snapshot
     }
-    fun scan(access: SaveScanAccess, packageName: String, user: Int): SaveSnapshot {
+    fun scan(access: SaveScanAccess, packageName: String, user: Int,
+        strategy: ChannelSearchStrategy = access.searchStrategy(packageName)): SaveSnapshot {
         val root = SaveLayout.root(packageName, user)
         access.stop(packageName, user)
         require(access.exists(root)) { "未找到所选版本的数据，请切换游戏版本，或扫描全部游戏版本后再读取。" }
         fun files(source: SaveSource): List<String> {
+            val query = strategy.source(source)
             val candidates = access.list(root, source)
             require(candidates.size <= 128) { "候选文件过多，暂不自动选择" }
             require(candidates.distinct().size == candidates.size) { "扫描列表含重复路径" }
             return candidates.filter { source.filename.matches(it.substringAfterLast('/')) }.onEach { path ->
-                val relative = path.removePrefix("$root/${source.directory}/")
-                require(path.startsWith("$root/${source.directory}/") && !path.contains("..") &&
-                    SaveLayout.editablePath.matches(path) && relative.split('/').size <= source.depth) { "扫描路径超出目标应用范围" }
-            }
+                require(query.containsPath(root, path) && SaveLayout.editablePath.matches(path)) { "扫描路径超出目标应用范围" }
+            }.filter { query.matchesFilename(it.substringAfterLast('/')) }
         }
         val gamePaths = files(SaveSource.GAME)
         require(gamePaths.size <= 1) { "找到多份 game.data，无法确定当前使用哪份，已保持只读" }

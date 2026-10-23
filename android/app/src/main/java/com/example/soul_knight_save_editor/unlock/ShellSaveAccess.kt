@@ -5,7 +5,8 @@ import java.util.UUID
 
 /** Fixed privileged file operations, shared by both backends; no public command execution. */
 open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: AccessBackend,
-    private val helperApk: String? = null) : BaseSaveAccess(backend) {
+    private val helperApk: String? = null,
+    private val strategyForPackage: (String) -> ChannelSearchStrategy = ChannelSearchStrategies::forPackage) : BaseSaveAccess(backend) {
     private val pathPattern = SaveLayout.restorablePath
     private val backupPattern = SaveLayout.backupDataPath
     private val directoryPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+(?:/(?:files(?:/[a-zA-Z0-9_.-]+)?|shared_prefs))?$")
@@ -17,6 +18,7 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     final override var latestDiagnostic: AccessDiagnostic? = null
         private set
     private fun quote(text: String) = "'" + text.replace("'", "'\\''") + "'"
+    final override fun searchStrategy(packageName: String): ChannelSearchStrategy = strategyForPackage(packageName)
     override fun close() { ready = false; digestTool = null; executor.close() }
 
     private fun context(path: String): Pair<String, Int> {
@@ -29,7 +31,8 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     }
     private fun diagnostic(request: RootCommandRequest, exit: Int?, elapsed: Long, output: String): AccessDiagnostic {
         val safe = if (request.sensitiveOutput) "包含文件内容的合并输出已省略" else sanitize(output)
-        return AccessDiagnostic(backend, request.stage, request.packageName, request.user, identity, exit, elapsed, safe)
+        val mountView = (executor as? NativeRootCommandExecutor)?.diagnosticSuffix.orEmpty()
+        return AccessDiagnostic(backend, request.stage, request.packageName, request.user, identity + mountView, exit, elapsed, safe)
             .also { latestDiagnostic = it }
     }
     private fun sanitize(output: String): String {
@@ -280,12 +283,13 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     final override fun list(root: String, source: SaveSource): List<String> {
         val (pkg, user) = context(root)
         require(root == SaveLayout.root(pkg, user)) { "扫描根目录无效" }
-        val directory = "$root/${source.directory}"
+        val query = strategyForPackage(pkg).source(source)
+        val directory = "$root/${query.directory}"
         if (!exists(directory)) return emptyList()
-        val paths = run("find ${quote(directory)} -maxdepth ${source.depth} -type f -name ${quote(source.glob)}", "列举存档位置", pkg, user)
+        val paths = run(query.findCommand(root), "列举存档位置", pkg, user)
             .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
         require(paths.size <= 128 && paths.distinct().size == paths.size) { "候选文件过多或重复，暂不自动选择" }
-        paths.forEach { path -> require(path.startsWith("$directory/") && !path.contains("..") && path.removePrefix("$directory/").split('/').size <= source.depth) { "扫描路径超出目标应用范围" } }
+        paths.forEach { path -> require(query.containsPath(root, path)) { "扫描路径超出目标应用范围" } }
         return paths
     }
     final override fun packages(user: Int): String {
@@ -295,19 +299,22 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     }
     final override fun probePaths(packageName: String, user: Int): List<String> {
         val root = SaveLayout.root(packageName, user)
-        val prefs = "$root/shared_prefs"
-        val files = "$root/files"
+        val strategy = strategyForPackage(packageName)
+        val prefsQuery = strategy.discoveryPrefs
+        val dataQuery = strategy.discoveryData
+        val prefs = "$root/${prefsQuery.directory}"
+        val files = "$root/${dataQuery.directory}"
         val paths = mutableListOf<String>()
         // No pipelines: find/grep errors cannot inherit head's successful exit.
         if (exists(prefs)) {
             // Older Android toybox find rejects the byte suffix in -size ...c. Check bytes
             // with the same stat primitive used by verified reads, before inspecting content.
-            val xmls = run("find ${quote(prefs)} -maxdepth 1 -type f -name '*.xml'", "搜索 XML 位置", packageName, user)
+            val xmls = run(prefsQuery.findCommand(root), "搜索 XML 位置", packageName, user)
                 .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
             require(xmls.size <= 128) { "候选 XML 过多，暂不自动搜索" }
             for (path in xmls) {
-                require(path.startsWith("$prefs/") && !path.contains("..") && path.removePrefix("$prefs/").split('/').size == 1) { "搜索路径超出目标应用范围" }
-                if (!pathPattern.matches(path)) continue
+                require(prefsQuery.containsPath(root, path)) { "搜索路径超出目标应用范围" }
+                if (!pathPattern.matches(path) || !prefsQuery.matchesFilename(path.substringAfterLast('/'))) continue
                 val q = checked(path)
                 val size = run("stat -c '%s' $q", "检查搜索 XML 大小", packageName, user).trim().toLongOrNull()
                 require(size != null && size >= 0) { "搜索 XML 文件大小无法识别" }
@@ -320,11 +327,11 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
             }
         }
         if (exists(files)) {
-            val found = run("find ${quote(files)} -maxdepth 2 -type f \\( -name 'game.data' -o -name 'item_data*.data*' \\)", "搜索数据存档位置", packageName, user)
+            val found = run(dataQuery.findCommand(root), "搜索数据存档位置", packageName, user)
                 .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
             require(found.size <= 128) { "候选数据文件过多，暂不自动搜索" }
-            found.forEach { path -> require(path.startsWith("$files/") && !path.contains("..") && path.removePrefix("$files/").split('/').size <= 2) { "搜索路径超出目标应用范围" } }
-            paths += found.filter(SaveLayout.editablePath::matches).take(13)
+            found.forEach { path -> require(dataQuery.containsPath(root, path)) { "搜索路径超出目标应用范围" } }
+            paths += found.filter { SaveLayout.editablePath.matches(it) && dataQuery.matchesFilename(it.substringAfterLast('/')) }.take(13)
         }
         return paths.distinct()
     }
@@ -336,12 +343,14 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
             .firstOrNull { it.trim().startsWith("versionName=") }?.trim()?.substringAfter("versionName=")?.take(80) ?: "未知版本"
     }
     final override fun backupPaths(packageName: String, user: Int): List<String> {
-        val root = "${SaveLayout.root(packageName, user)}/files"
+        val packageRoot = SaveLayout.root(packageName, user)
+        val query = strategyForPackage(packageName).backupData
+        val root = "$packageRoot/${query.directory}"
         if (!exists(root)) return emptyList()
-        val paths = run("find ${quote(root)} -maxdepth 2 -type f \\( -name '*.data' -o -name '*.data.new' -o -name '*.data_temp' -o -name '*.data.new_temp' \\)", "列举备份源文件", packageName, user)
+        val paths = run(query.findCommand(packageRoot), "列举备份源文件", packageName, user)
             .lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().sorted().toList()
         require(paths.size < 128) { "本地文件过多，暂不创建备份" }
-        paths.forEach { require(it.startsWith("$root/") && !it.contains("..") && backupPattern.matches(it)) { "备份路径超出目标应用范围" } }
-        return paths
+        paths.forEach { require(query.containsPath(packageRoot, it) && backupPattern.matches(it)) { "备份路径超出目标应用范围" } }
+        return paths.filter { query.matchesFilename(it.substringAfterLast('/')) }
     }
 }
