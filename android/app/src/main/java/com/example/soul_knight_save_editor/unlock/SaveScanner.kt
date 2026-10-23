@@ -29,6 +29,7 @@ object SaveLayout {
 
 /** Transport supplies bounded directory listings and verified reads; scanner owns recognition policy. */
 interface SaveScanAccess {
+    /** Legacy name: require no target processes; never force-stop the game. */
     fun stop(packageName: String, user: Int)
     fun exists(directory: String): Boolean
     fun list(root: String, source: SaveSource): List<String>
@@ -68,6 +69,7 @@ object SaveScanner {
         require(access.exists(root)) { "当前游戏版本已不存在，请重新查找" }
         val snapshot = SaveSnapshot(target.packageName, target.user, target.prefs?.let(access::read), target.game?.let(access::read),
             target.items.map(access::read), target.statistics.map(access::read), target.weaponSkins.map(access::read))
+        SaveReadConsistency.verify(target.packageName, target.user, snapshot.files, access::stop, access::read)
         if (target.prefsHasAccount) require(snapshot.prefs?.let { target.account in UnlockEngine.accounts(it.bytes) } == true) { "存档账号已改变，请重新查找并选择账号" }
         require(target.account in EditEngine.accounts(snapshot)) { "存档账号已改变，请重新查找" }
         return snapshot
@@ -95,6 +97,8 @@ object SaveScanner {
         val prefs = files(SaveSource.PREFS).map(access::read).filter { UnlockEngine.recognizesPrefs(it.bytes) }
         require(prefs.size <= 1) { "找到多份包含角色特征的 XML，暂不自动选择" }
         require(prefs.isNotEmpty() || items.isNotEmpty() || statistics.isNotEmpty() || weaponSkins.isNotEmpty()) { "尚未识别到角色、物品、统计或武器皮肤存档，请检查渠道包名与本地存档" }
-        return SaveSnapshot(packageName, user, prefs.singleOrNull(), game, items, statistics, weaponSkins)
+        return SaveSnapshot(packageName, user, prefs.singleOrNull(), game, items, statistics, weaponSkins).also {
+            SaveReadConsistency.verify(packageName, user, it.files, access::stop, access::read)
+        }
     }
 }

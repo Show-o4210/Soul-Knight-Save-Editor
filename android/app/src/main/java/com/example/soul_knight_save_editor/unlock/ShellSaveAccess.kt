@@ -39,9 +39,11 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     }
 
     private fun result(command: String, stage: String, packageName: String? = null, user: Int? = null,
-        input: ByteArray? = null, writing: Boolean = false, sensitive: Boolean = false): Pair<RootCommandRequest, RootCommandResult> {
+        input: ByteArray? = null, writing: Boolean = false, sensitive: Boolean = false,
+        timeoutMillis: Long? = null): Pair<RootCommandRequest, RootCommandResult> {
         checkCancellation()
-        val request = RootCommandRequest(command, input, stage, packageName, user, writing, sensitive) { cancellation?.invoke() == true }
+        val request = RootCommandRequest(command, input, stage, packageName, user, writing, sensitive,
+            remainingReadMillis(timeoutMillis ?: 45_000)) { cancellation?.invoke() == true }
         val output = try { executor.execute(request) } catch (error: RootExecutionFailure) {
             if (error.kind in setOf(AccessFailureKind.IO, AccessFailureKind.SESSION_DISCONNECTED, AccessFailureKind.TIMEOUT)) ready = false
             val detail = diagnostic(request, null, error.elapsedMillis, error.mergedOutput)
@@ -109,7 +111,19 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     final override fun stop(packageName: String, user: Int) {
         SaveLayout.root(packageName, user)
         ensureRoot(packageName, user)
-        run("am force-stop --user $user ${quote(packageName)}", "停止目标游戏", packageName, user)
+        val (request, output) = result(GameProcessProbe.COMMAND, "检查目标游戏运行状态", packageName, user,
+            sensitive = true, timeoutMillis = GameProcessProbe.TIMEOUT_MILLIS)
+        if (output.exitCode != 0) {
+            val detail = diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+            throw AccessFailure(AccessFailureKind.PROCESS_CHECK_FAILED, "无法确认游戏已退出，已停止存档操作；请检查访问通道后重试", detail)
+        }
+        val running = try { GameProcessProbe.isRunning(output.mergedOutput, packageName, user) }
+            catch (error: IllegalArgumentException) {
+                val detail = diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+                throw AccessFailure(AccessFailureKind.PROCESS_CHECK_FAILED, "无法完整检查游戏进程，已停止存档操作；请检查访问通道后重试", detail, cause = error)
+            }
+        val detail = diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+        if (running) throw AccessFailure(AccessFailureKind.GAME_RUNNING, "检测到所选游戏仍在运行，请保存并彻底退出游戏后重试", detail)
     }
     final override fun exists(directory: String): Boolean {
         require(directoryPattern.matches(directory) && !directory.contains("..")) { "目录不在本地存档范围内" }
@@ -145,9 +159,11 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         val label = run("ls -Zd $q", "读取 SELinux context", pkg, user).trim().split(Regex("\\s+")).firstOrNull { it.startsWith("u:object_r:") } ?: ""
         require(label.isEmpty() || Regex("[a-zA-Z0-9_:,.-]+").matches(label))
         val bytes = Base64.decode(run("base64 $q", "读取存档内容", pkg, user, sensitive = true), Base64.DEFAULT)
-        require(bytes.size.toLong() == metadata[2].toLong()) { "读取期间文件发生变化，请重试" }
+        if (bytes.size.toLong() != metadata[2].toLong())
+            throw AccessFailure(AccessFailureKind.SOURCE_CHANGED, "读取期间存档发生变化，请保持游戏关闭后重新读取", latestDiagnostic)
         val remoteHash = run("sha256sum $q", "读取完整性校验", pkg, user).trim().substringBefore(' ')
-        require(UnlockEngine.sha(bytes) == remoteHash) { "读取校验不一致，请重试" }
+        if (UnlockEngine.sha(bytes) != remoteHash)
+            throw AccessFailure(AccessFailureKind.SOURCE_CHANGED, "读取期间存档发生变化，请保持游戏关闭后重新读取", latestDiagnostic)
         return SaveFile(path, bytes, metadata[0], metadata[1], label)
     }
     final override fun replace(file: SaveFile, bytes: ByteArray) {

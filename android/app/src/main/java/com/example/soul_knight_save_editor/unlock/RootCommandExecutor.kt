@@ -6,11 +6,15 @@ import java.util.UUID
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 data class RootCommandRequest(val command: String, val inputBase64: ByteArray? = null,
     val stage: String, val packageName: String? = null, val user: Int? = null,
     val writing: Boolean = false, val sensitiveOutput: Boolean = false,
+    val timeoutMillis: Long? = null,
     val isCancelled: () -> Boolean = { false })
 data class RootCommandResult(val exitCode: Int, val mergedOutput: String, val elapsedMillis: Long)
 
@@ -26,9 +30,38 @@ class RootExecutionFailure(val kind: AccessFailureKind, val elapsedMillis: Long,
 /** A bounded framed shell. Shizuku constructs this with /system/bin/sh, never su. */
 class ProcessRootCommandExecutor(private val shell: List<String>, private val timeoutMillis: Long = 45_000,
     private val processFactory: () -> Process = { ProcessBuilder(shell).redirectErrorStream(true).start() }) : RootCommandExecutor {
-    private var session: Process? = null
-    private var reader: BufferedReader? = null
+    private var session: Session? = null
     @Volatile private var closed = false
+    private class Session(val process: Process) {
+        val reader = process.inputStream.bufferedReader(Charsets.UTF_8)
+        private val disposing = AtomicBoolean()
+        private val cleanupComplete = AtomicBoolean()
+        private val released = AtomicBoolean()
+        private val workers = AtomicInteger()
+
+        fun workerStarted() { workers.incrementAndGet() }
+        fun workerFinished() { workers.decrementAndGet(); releaseIfComplete() }
+        private fun releaseIfComplete() {
+            if (cleanupComplete.get() && workers.get() == 0 && released.compareAndSet(false, true))
+                sessionSlots.release()
+        }
+        fun dispose() {
+            if (!disposing.compareAndSet(false, true)) return
+            daemon("root-shell-cleanup") {
+                try {
+                    // Android/Java Process.destroy and stream.close can themselves wait on IO locks.
+                    // None of them may run on the caller that is trying to report a timeout.
+                    runCatching { process.destroy() }
+                    runCatching { process.outputStream.close() }
+                    runCatching { reader.close() }
+                    runCatching { process.errorStream.close() }
+                } finally {
+                    cleanupComplete.set(true)
+                    releaseIfComplete()
+                }
+            }.start()
+        }
+    }
     private class Running(val writing: Boolean) {
         @Volatile var acknowledged = false
         @Volatile var output: Future<Pair<Int, String>>? = null
@@ -37,6 +70,12 @@ class ProcessRootCommandExecutor(private val shell: List<String>, private val ti
     @Volatile private var running: Running? = null
 
     companion object {
+        // A broken su/child can retain inherited pipes after destroy. Bound abandoned IO across
+        // executor instances rather than creating an unlimited number of blocked daemon threads.
+        private val sessionSlots = Semaphore(8)
+        private val threadIds = AtomicInteger()
+        private fun daemon(name: String, action: () -> Unit) = Thread(action,
+            "$name-${threadIds.incrementAndGet()}").apply { isDaemon = true }
         private val uncertain = java.util.Collections.synchronizedSet(mutableSetOf<ProcessRootCommandExecutor>())
         private fun checkUncertainWrites() {
             val snapshot = synchronized(uncertain) { uncertain.toList() }
@@ -58,26 +97,32 @@ class ProcessRootCommandExecutor(private val shell: List<String>, private val ti
         disposeSession()
     }
     private fun disposeSession() {
-        runCatching { session?.outputStream?.close() }
-        session?.destroy()
-        runCatching { reader?.close() }
+        val retired = session
         session = null
-        reader = null
+        running = null
+        retired?.dispose()
     }
     @Synchronized override fun execute(request: RootCommandRequest): RootCommandResult {
         checkUncertainWrites()
         // close() ends the user operation. Native Root reuses this object for the next operation.
         if (closed) { disposeSession(); closed = false }
         require(timeoutMillis > 0)
+        require(request.timeoutMillis == null || request.timeoutMillis > 0)
+        val commandTimeoutMillis = minOf(timeoutMillis, request.timeoutMillis ?: timeoutMillis)
         if (request.isCancelled()) throw DiscoveryCancelled()
         val startedAt = System.nanoTime()
         fun elapsed() = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
         if (session == null) {
-            session = try { processFactory() } catch (error: Exception) { throw RootExecutionFailure(AccessFailureKind.IO, elapsed(), cause = error) }
-            reader = session!!.inputStream.bufferedReader(Charsets.UTF_8)
+            if (!sessionSlots.tryAcquire()) throw RootExecutionFailure(AccessFailureKind.IO, elapsed(),
+                cause = IOException("Root shell cleanup capacity reached"))
+            session = try { Session(processFactory()) } catch (error: Exception) {
+                sessionSlots.release()
+                throw RootExecutionFailure(AccessFailureKind.IO, elapsed(), cause = error)
+            }
         }
-        val process = session!!
-        val commandReader = reader!!
+        val commandSession = session!!
+        val process = commandSession.process
+        val commandReader = commandSession.reader
         val token = "SK_" + UUID.randomUUID().toString().replace("-", "")
         val begin = "${token}_BEGIN"
         val end = "${token}_END:"
@@ -86,9 +131,10 @@ class ProcessRootCommandExecutor(private val shell: List<String>, private val ti
         require(payload.length <= UnlockEngine.MAX_BYTES * 2 && payload.all { it.isLetterOrDigit() || it in "+/=\r\n" })
         val script = "printf '%s\\n' '$begin'\n(\n${request.command}\n) <<'$delimiter'\n$payload\n$delimiter\n" +
             "_sk_result=\$?\nprintf '\\n%s:%s\\n' '${token}_END' \"\$_sk_result\"\n"
-        val pool = Executors.newFixedThreadPool(2)
+        val pool = Executors.newFixedThreadPool(2) { task -> daemon("root-shell-io") { task.run() } }
         val active = Running(request.writing)
         running = active
+        commandSession.workerStarted()
         active.output = pool.submit<Pair<Int, String>> {
             var begun = false
             val result = StringBuilder()
@@ -111,30 +157,39 @@ class ProcessRootCommandExecutor(private val shell: List<String>, private val ti
                 }
                 @Suppress("UNREACHABLE_CODE") error("No command frame")
             } finally {
-                pool.shutdown()
-                if (closed && active.acknowledged) {
-                    runCatching { process.outputStream.close() }
-                    process.destroy()
-                }
+                commandSession.workerFinished()
+                if (closed && active.acknowledged) commandSession.dispose()
             }
         }
+        commandSession.workerStarted()
         active.input = pool.submit {
-            process.outputStream.write(script.toByteArray(Charsets.UTF_8))
-            process.outputStream.flush()
+            try {
+                process.outputStream.write(script.toByteArray(Charsets.UTF_8))
+                process.outputStream.flush()
+            } finally { commandSession.workerFinished() }
         }
+        // Both jobs are submitted before shutdown; an immediate EOF must not reject the writer.
+        pool.shutdown()
         try {
-            val deadline = startedAt + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+            val deadline = startedAt + TimeUnit.MILLISECONDS.toNanos(commandTimeoutMillis)
+            var output: Pair<Int, String>? = null
             while (true) {
                 if (request.isCancelled()) {
                     if (!request.writing) throw DiscoveryCancelled()
-                    throw RootExecutionFailure(AccessFailureKind.SESSION_DISCONNECTED, elapsed(), uncertainWrite = true)
+                    throw RootExecutionFailure(AccessFailureKind.SESSION_DISCONNECTED, elapsed(), uncertainWrite = !active.acknowledged)
                 }
-                if (System.nanoTime() >= deadline) throw RootExecutionFailure(AccessFailureKind.TIMEOUT, elapsed(), uncertainWrite = request.writing)
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) throw RootExecutionFailure(AccessFailureKind.TIMEOUT, elapsed(), uncertainWrite = request.writing && !active.acknowledged)
                 if (active.input!!.isDone) active.input!!.get()
                 try {
-                    val (exit, out) = active.output!!.get(minOf(200, timeoutMillis), TimeUnit.MILLISECONDS)
-                    active.input!!.get()
-                    return RootCommandResult(exit, out, elapsed())
+                    val pollNanos = minOf(TimeUnit.MILLISECONDS.toNanos(200), remaining)
+                    if (output == null) {
+                        output = active.output!!.get(pollNanos, TimeUnit.NANOSECONDS)
+                    } else {
+                        // An END frame does not justify waiting without a deadline for stdin.flush.
+                        active.input!!.get(pollNanos, TimeUnit.NANOSECONDS)
+                        return RootCommandResult(output.first, output.second, elapsed())
+                    }
                 } catch (_: java.util.concurrent.TimeoutException) { /* Poll cancellation and the deadline. */ }
             }
         } catch (error: DiscoveryCancelled) {

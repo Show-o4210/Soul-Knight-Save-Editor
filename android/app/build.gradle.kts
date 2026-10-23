@@ -35,8 +35,8 @@ android {
         applicationId = "com.example.soul_knight_save_editor"
         minSdk = 24
         targetSdk = 36
-        versionCode = 26
-        versionName = "2.0.5-rc01"
+        versionCode = 27
+        versionName = "2.0.5-rc02"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

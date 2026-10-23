@@ -46,3 +46,13 @@ fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): A
     weaponInfo = null, preview = null, previewMode = null, message = message,
     itemMessage = "请先读取存档", weaponMessage = "请先读取存档", petMessage = "请先读取存档"
 )
+
+fun AssistantState.afterStorageFailure(error: Exception): AssistantState {
+    val invalidates = generateSequence<Throwable>(error) { it.cause }.any {
+        it is SaveSnapshotChanged || it is AccessFailure && it.kind in setOf(
+            AccessFailureKind.GAME_RUNNING, AccessFailureKind.PROCESS_CHECK_FAILED,
+            AccessFailureKind.SOURCE_CHANGED, AccessFailureKind.TIMEOUT, AccessFailureKind.SESSION_DISCONNECTED)
+    }
+    val text = error.message ?: "操作未完成，已保存的备份仍保留"
+    return if (invalidates) clearLoaded(text) else copy(message = text, preview = null, previewMode = null)
+}

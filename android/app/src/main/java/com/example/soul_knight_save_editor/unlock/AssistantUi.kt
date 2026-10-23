@@ -398,7 +398,7 @@ private val workspaceSections = listOf(
 
     }
     restoreId?.let { id -> AlertDialog(onDismissRequest = { restoreId = null }, title = { Text("还原 ${state.backupNames[id].orEmpty()}？") },
-        text = { Text("目标游戏：${state.packageName}\n将关闭游戏，把备份内的文件覆盖回原位置，对应账号已有的读取开关设为 0。后续本地进度会被覆盖；还原前会自动备份当前文件，失败时恢复。不会删除备份之外的文件。") },
+        text = { Text("目标游戏：${state.packageName}\n请先保存并彻底退出游戏。检查通过后，把备份内的文件覆盖回原位置，对应账号已有的读取开关设为 0。后续本地进度会被覆盖；还原前会自动备份当前文件。游戏中途启动时停止操作并保留恢复记录。不会删除备份之外的文件。") },
         confirmButton = { Button({ restoreId = null; model.restoreBackup(id) }) { Text("确认还原") } }, dismissButton = { TextButton({ restoreId = null }) { Text("取消") } }) }
     renameId?.let { id -> AlertDialog(onDismissRequest = { renameId = null }, title = { Text("重命名备份") },
         text = { OutlinedTextField(renameText, { renameText = it }, label = { Text("备份名称") }, singleLine = true) },
@@ -471,7 +471,7 @@ private val workspaceSections = listOf(
 @Composable private fun Preview(model: AssistantModel) {
     val state = model.state
     var expanded by remember(state.preview) { mutableStateOf(false) }
-    state.preview?.let { patch -> AlertDialog(onDismissRequest = model::dismiss, title = { FeatureTitle("确认本次修改", HelpTopic("修改说明", "目标版本：${state.snapshot?.packageName}\n\n应用前会关闭游戏、核对原件、创建备份并写入。账号已有的本地读取开关会设为 0；缺失开关不新增。切换模式不会混入另一套草稿。")) }, text = {
+    state.preview?.let { patch -> AlertDialog(onDismissRequest = model::dismiss, title = { FeatureTitle("确认本次修改", HelpTopic("修改说明", "目标版本：${state.snapshot?.packageName}\n\n请先保存并彻底退出游戏。应用前检查游戏进程、核对原件、创建备份并写入；游戏中途启动时停止操作并保留恢复记录。账号已有的本地读取开关会设为 0；缺失开关不新增。切换模式不会混入另一套草稿。")) }, text = {
         LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { Text("${state.previewMode?.label.orEmpty()}\n将修改 ${patch.outputs.size} 份存档，修改前会自动备份。") }
             if (state.previewMode == AssistantMode.FREE) item { Text("仅检查格式与编码，不修正字段、镜像或分片关系。游戏能否加载用户修改后的内容，由用户自行判断。") }

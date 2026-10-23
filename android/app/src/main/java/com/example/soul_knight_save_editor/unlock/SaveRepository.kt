@@ -14,6 +14,7 @@ data class SavePlan(val outputs: Map<String, ByteArray>, val changes: List<Strin
 interface DeviceStorage {
     val backendId: String get() = "native-root"
     fun assertIdleForRecovery() {}
+    /** Legacy API name: reject a running game; no process is killed. */
     fun stop(packageName: String, user: Int)
     fun read(path: String): SaveFile
     fun replace(file: SaveFile, bytes: ByteArray)
@@ -98,8 +99,9 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
 
     private fun commit(snapshot: SaveSnapshot, proposed: Map<String, ByteArray>, restoring: Boolean = false): String {
         device.stop(snapshot.packageName, snapshot.user)
-        // Recheck every captured file, even an unchanged mirror, after stopping the game.
-        snapshot.files.forEach { require(same(it, device.read(it.path))) { "存档已在扫描后变化；请重新扫描，不覆盖新进度" } }
+        // Recheck every captured file, including unchanged mirrors, while the game is closed.
+        snapshot.files.forEach { if (!same(it, device.read(it.path))) throw SaveSnapshotChanged("存档已在扫描后变化；请重新读取，不覆盖新进度") }
+        device.stop(snapshot.packageName, snapshot.user)
         val changed = snapshot.files.filter { !it.bytes.contentEquals(proposed.getValue(it.path)) }
         require(changed.isNotEmpty()) { "所选内容没有需要写回的变化" }
         val id = "${System.currentTimeMillis()}-${UUID.randomUUID()}"
@@ -127,11 +129,15 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         try {
             status(folder, "applying")
             changed.forEach { original ->
-                require(same(original, device.read(original.path))) { "写回前检测到文件变化，停止操作" }
+                device.stop(snapshot.packageName, snapshot.user)
+                if (!same(original, device.read(original.path))) throw SaveSnapshotChanged("写回前检测到文件变化，停止操作")
+                device.stop(snapshot.packageName, snapshot.user)
                 device.replace(original, proposed.getValue(original.path))
+                device.stop(snapshot.packageName, snapshot.user)
                 val actual = device.read(original.path)
                 require(same(original.copy(bytes = proposed.getValue(original.path)), actual)) { "写回或权限复读不一致" }
             }
+            device.stop(snapshot.packageName, snapshot.user)
             status(folder, "complete")
             return id
         } catch (error: Exception) {
@@ -166,6 +172,7 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         val entries = manifest.getValue("entries").jsonArray
         // Unknown third-party changes are never overwritten by automatic crash recovery.
         entries.forEachIndexed { index, json ->
+            device.stop(manifest.getValue("package").jsonPrimitive.content, manifest.getValue("user").jsonPrimitive.int)
             val entry = json.jsonObject
             val before = entryFile(folder, index, entry, "before")
             val after = entryFile(folder, index, entry, "after")
@@ -181,12 +188,17 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         }
         status(folder, "recovering")
         entries.indices.reversed().forEach { index ->
+            device.stop(manifest.getValue("package").jsonPrimitive.content, manifest.getValue("user").jsonPrimitive.int)
             val entry = entries[index].jsonObject
             val before = entryFile(folder, index, entry, "before")
             val after = entryFile(folder, index, entry, "after")
             val live = device.read(before.path)
             require(same(live, before) || same(live, after)) { "恢复前检测到事务外的新变化，已停止；请保留备份" }
-            if (!same(live, before)) device.replace(before, before.bytes)
+            if (!same(live, before)) {
+                device.stop(manifest.getValue("package").jsonPrimitive.content, manifest.getValue("user").jsonPrimitive.int)
+                device.replace(before, before.bytes)
+            }
+            device.stop(manifest.getValue("package").jsonPrimitive.content, manifest.getValue("user").jsonPrimitive.int)
             require(same(device.read(before.path), before)) { "恢复复读失败" }
         }
         status(folder, "rolled_back")

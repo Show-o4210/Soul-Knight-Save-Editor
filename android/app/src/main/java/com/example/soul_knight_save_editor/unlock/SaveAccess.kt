@@ -8,7 +8,8 @@ enum class AccessBackend(val id: String, val label: String) {
 }
 
 enum class AccessFailureKind {
-    ROOT_IDENTITY, TARGET_ACCESS_DENIED, COMMAND_FAILED, SESSION_DISCONNECTED, TIMEOUT, IO, OUTPUT_LIMIT, WRITE_NOT_IDLE
+    ROOT_IDENTITY, TARGET_ACCESS_DENIED, COMMAND_FAILED, SESSION_DISCONNECTED, TIMEOUT, IO, OUTPUT_LIMIT, WRITE_NOT_IDLE,
+    GAME_RUNNING, PROCESS_CHECK_FAILED, SOURCE_CHANGED
 }
 
 /** Diagnostic data never contains commands, save paths, file bodies or account identifiers. */
@@ -32,6 +33,8 @@ interface SaveAccess : DeviceStorage, AutoCloseable {
     fun discover(user: Int, preferred: String, ownPackage: String, isCancelled: () -> Boolean,
         progress: (DiscoveryProgress) -> Unit, found: (GameCandidate) -> Unit): DiscoveryProgress
     fun backup(packageName: String, user: Int): BackupPayload
+    fun verifySnapshot(snapshot: SaveSnapshot) = SaveReadConsistency.verify(snapshot.packageName, snapshot.user,
+        snapshot.files, ::stop, ::read)
     fun freeSnapshot(packageName: String, user: Int): SaveSnapshot = backup(packageName, user).let {
         SaveSnapshot(it.packageName, it.user, null, null, it.files)
     }
@@ -41,14 +44,30 @@ interface SaveAccess : DeviceStorage, AutoCloseable {
 /** Shared recognition policy; the privileged service exposes only these fixed primitives. */
 abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveAccess, SaveScanAccess {
     protected var cancellation: (() -> Boolean)? = null
-    protected fun checkCancellation() { if (cancellation?.invoke() == true) throw DiscoveryCancelled() }
+    private var readDeadline = 0L
+    protected open fun readNowNanos(): Long = System.nanoTime()
+    protected fun checkCancellation() {
+        if (readDeadline != 0L && readNowNanos() >= readDeadline)
+            throw AccessFailure(AccessFailureKind.TIMEOUT, "读取操作超时，请保持游戏关闭后重试")
+        if (cancellation?.invoke() == true) throw DiscoveryCancelled()
+    }
+    protected fun remainingReadMillis(maximumMillis: Long): Long {
+        checkCancellation()
+        return if (readDeadline == 0L) maximumMillis else
+            minOf(maximumMillis, TimeUnit.NANOSECONDS.toMillis(readDeadline - readNowNanos()).coerceAtLeast(1))
+    }
+    private fun <T> reading(block: () -> T): T {
+        val previous = readDeadline
+        if (previous == 0L) readDeadline = readNowNanos() + TimeUnit.MINUTES.toNanos(2)
+        return try { checkCancellation(); block().also { checkCancellation() } } finally { readDeadline = previous }
+    }
     abstract fun packages(user: Int): String
     abstract fun probePaths(packageName: String, user: Int): List<String>
     abstract fun version(packageName: String): String
     abstract fun backupPaths(packageName: String, user: Int): List<String>
     abstract fun readBackup(path: String): SaveFile
 
-    final override fun freeSnapshot(packageName: String, user: Int): SaveSnapshot {
+    final override fun freeSnapshot(packageName: String, user: Int): SaveSnapshot = reading {
         val root = SaveLayout.root(packageName, user)
         stop(packageName, user)
         require(exists(root)) { "未找到所选版本的数据，请切换游戏版本，或扫描全部游戏版本后再读取。" }
@@ -67,11 +86,16 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
         require(data.size + prefs.size <= 128) { "文件数量超过当前支持范围" }
         val payload = BackupPayload(packageName, user, data + prefs)
         BackupArchive.validate(payload)
-        return SaveSnapshot(packageName, user, prefs.firstOrNull(), null, data + prefs.drop(1))
+        SaveReadConsistency.verify(packageName, user, payload.files, ::stop, ::readBackup)
+        SaveSnapshot(packageName, user, prefs.firstOrNull(), null, data + prefs.drop(1))
     }
 
-    final override fun scan(packageName: String, user: Int) = SaveScanner.scan(this, packageName, user)
-    final override fun refresh(target: PinnedSaveTarget) = SaveScanner.refresh(this, target)
+    final override fun scan(packageName: String, user: Int) = reading { SaveScanner.scan(this, packageName, user) }
+    final override fun refresh(target: PinnedSaveTarget) = reading { SaveScanner.refresh(this, target) }
+    final override fun verifySnapshot(snapshot: SaveSnapshot) = reading {
+        BackupArchive.validate(BackupPayload(snapshot.packageName, snapshot.user, snapshot.files))
+        SaveReadConsistency.verify(snapshot.packageName, snapshot.user, snapshot.files, ::stop, ::readBackup)
+    }
     final override fun discover(user: Int, preferred: String, ownPackage: String, isCancelled: () -> Boolean,
         progress: (DiscoveryProgress) -> Unit, found: (GameCandidate) -> Unit): DiscoveryProgress {
         require(user >= 0 && SaveLayout.packagePattern.matches(preferred) && SaveLayout.packagePattern.matches(ownPackage)) { "包名或 Android 用户编号无效" }
@@ -87,6 +111,7 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
                 checkCancellation()
                 if (System.nanoTime() >= deadline) return state
                 try {
+                    stop(pkg, user)
                     val paths = probePaths(pkg, user)
                     val evidence = linkedSetOf<String>()
                     var incomplete = paths.size > SaveDiscovery.MAX_PROBES
@@ -106,13 +131,18 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
                         catch (error: Exception) { rethrowConnectionFailure(error); incomplete = true }
                     }
                     if (evidence.isNotEmpty()) {
+                        stop(pkg, user)
                         val version = try { version(pkg) } catch (error: Exception) { rethrowConnectionFailure(error); "未知版本" }
                         checkCancellation()
                         found(GameCandidate(pkg, version = version, evidence = evidence.toList()))
                     }
                     if (incomplete) state = state.copy(skipped = state.skipped + 1)
                 } catch (error: DiscoveryCancelled) { throw error }
-                catch (error: Exception) { rethrowConnectionFailure(error); state = state.copy(skipped = state.skipped + 1) }
+                catch (error: Exception) {
+                    rethrowConnectionFailure(error)
+                    state = state.copy(skipped = state.skipped + 1,
+                        running = state.running + if (error is AccessFailure && error.kind == AccessFailureKind.GAME_RUNNING) 1 else 0)
+                }
                 state = state.copy(checked = state.checked + 1)
                 progress(state)
             }
@@ -121,9 +151,9 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
     }
     private fun rethrowConnectionFailure(error: Exception) {
         if (error is AccessFailure && error.kind in setOf(AccessFailureKind.ROOT_IDENTITY, AccessFailureKind.SESSION_DISCONNECTED,
-                AccessFailureKind.TIMEOUT, AccessFailureKind.IO, AccessFailureKind.WRITE_NOT_IDLE)) throw error
+                AccessFailureKind.TIMEOUT, AccessFailureKind.IO, AccessFailureKind.WRITE_NOT_IDLE, AccessFailureKind.PROCESS_CHECK_FAILED)) throw error
     }
-    final override fun backup(packageName: String, user: Int): BackupPayload {
+    final override fun backup(packageName: String, user: Int): BackupPayload = reading {
         val snapshot = scan(packageName, user)
         val paths = backupPaths(packageName, user)
         require(paths.size < 128) { "本地文件过多，暂不创建备份" }
@@ -135,7 +165,7 @@ abstract class BaseSaveAccess(final override val backend: AccessBackend) : SaveA
             require(total <= BackupArchive.MAX_TOTAL_BYTES) { "本地存档超过当前备份大小限制" }
             files += file
         }
-        files.forEach { original -> require(readBackup(original.path).bytes.contentEquals(original.bytes)) { "备份期间存档发生变化，请保持游戏关闭后重试" } }
-        return BackupPayload(packageName, user, files)
+        SaveReadConsistency.verify(packageName, user, files, ::stop, ::readBackup)
+        BackupPayload(packageName, user, files)
     }
 }

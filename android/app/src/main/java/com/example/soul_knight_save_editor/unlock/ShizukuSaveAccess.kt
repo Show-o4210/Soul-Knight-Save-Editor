@@ -175,7 +175,7 @@ class ShizukuSaveAccess(context: Context, private val onStateChanged: () -> Unit
                 "Shizuku 上一次传输尚未结束，请等待后重试", latestDiagnostic, writerGuard.contains("instance"))
             ipcWorker.submit<T> { block() }.also { pendingTask = it }
         }
-        try { return future.get(OPERATION_SECONDS, TimeUnit.SECONDS) }
+        try { return future.get(remainingReadMillis(OPERATION_SECONDS * 1000), TimeUnit.MILLISECONDS) }
         catch (error: Exception) { cleanup(); throw failure(stage, error, writingOperation, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)) }
         finally { synchronized(ipcLock) { if (future.isDone && pendingTask === future) pendingTask = null } }
         // Binder calls are not interruptible. Never cancel or kill a running remote write.
@@ -188,7 +188,7 @@ class ShizukuSaveAccess(context: Context, private val onStateChanged: () -> Unit
         val match = Regex("^/data/(?:user/([0-9]+)|data)/([^/]+)").find(path)
         target(match?.groupValues?.get(2), match?.groupValues?.get(1)?.toIntOrNull() ?: 0)
     }
-    override fun stop(packageName: String, user: Int) { ShizukuWire.target(packageName, user); target(packageName, user); val service = ready(); scalar("停止游戏") { decode(service.stop(packageName, user)) } }
+    override fun stop(packageName: String, user: Int) { ShizukuWire.target(packageName, user); target(packageName, user); val service = ready(); scalar("检查游戏运行状态") { decode(service.stop(packageName, user)) } }
     override fun exists(directory: String): Boolean { ShizukuWire.directory(directory); pathTarget(directory); val service = ready(); return scalar("检查目录") { decode(service.exists(directory)) }.jsonPrimitive.boolean }
     override fun list(root: String, source: SaveSource): List<String> { ShizukuWire.directory(root, true); pathTarget(root); val service = ready(); return scalar("列出存档") { decode(service.list(root, source.ordinal)) }.jsonArray.map { it.jsonPrimitive.content } }
     override fun packages(user: Int): String { require(user in 0..100000); target(null, user); val service = ready(); return scalar("列出应用") { decode(service.packages(user)) }.jsonPrimitive.content }

@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -223,7 +224,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                         it.copy(packageName = it.packageName ?: state.packageName,
                             user = it.user ?: android.os.Process.myUid() / 100000).render()
                     }
-                state = state.copy(message = error.message ?: "操作未完成，已保存的备份仍保留", preview = null, previewMode = null)
+                state = state.afterStorageFailure(error)
                 if (operationDevice.backend == AccessBackend.NATIVE_ROOT && generateSequence<Throwable>(error) { it.cause }
                         .any { it is AccessFailure && it.kind == AccessFailureKind.ROOT_IDENTITY }) {
                     state = state.copy(accessStatus = "原生 Root：本次权限身份检查失败，请检查授权后重试。")
@@ -234,13 +235,26 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                 val accessStatus = if (operationDevice is ShizukuSaveAccess) {
                     operationDevice.statusString + if (state.snapshot != null && operationDevice.connected) "；当前目标目录及存档读取通过。" else "；目标目录尚未通过本次读取验证。"
                 } else state.accessStatus
-                withContext(Dispatchers.IO) { operationDevice.close() }
-                try { refreshBackups(prune = succeeded) }
-                catch (error: Exception) { state = state.copy(message = state.message + "\n备份列表／保留上限处理未完成：${error.message}") }
-                state = state.copy(busy = false, discovering = false, pending = operationRepository.pending(),
-                    accessStatus = accessStatus, accessDiagnostic = diagnostic.ifEmpty { state.accessDiagnostic },
-                    pendingPackages = operationRepository.pending().associateWith(operationRepository::packageName),
-                    backups = operationRepository.completed(state.packageName), originalBackups = operationRepository.exportable(state.packageName))
+                withContext(NonCancellable) {
+                    try {
+                        try { withContext(Dispatchers.IO) { operationDevice.close() } }
+                        catch (error: Exception) { state = state.copy(message = state.message + "\n访问通道清理未完成：${error.message}") }
+                        try { refreshBackups(prune = succeeded) }
+                        catch (error: Exception) { state = state.copy(message = state.message + "\n备份列表／保留上限处理未完成：${error.message}") }
+                        val records = withContext(Dispatchers.IO) {
+                            val pending = operationRepository.pending()
+                            Triple(pending.associateWith(operationRepository::packageName),
+                                operationRepository.completed(state.packageName), operationRepository.exportable(state.packageName))
+                        }
+                        state = state.copy(pending = records.first.keys.toList(), pendingPackages = records.first,
+                            backups = records.second, originalBackups = records.third)
+                    } catch (error: Exception) {
+                        state = state.copy(message = state.message + "\n备份状态读取未完成：${error.message}")
+                    } finally {
+                        state = state.copy(busy = false, discovering = false, accessStatus = accessStatus,
+                            accessDiagnostic = diagnostic.ifEmpty { state.accessDiagnostic })
+                    }
+                }
             }
         }
     }
@@ -353,7 +367,8 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
                 }
                 state = state.copy(discoveryProgress = progress, discoveryMessage = (if (progress.checked < progress.total) "搜索达到时间上限，已检查 ${progress.checked}/${progress.total} 个应用。" else "搜索完成。") +
                     "请选择你要修改的版本。" +
-                    if (progress.skipped > 0) " ${progress.skipped} 个应用有未完整检查的文件，可手动填写包名扫描。" else "")
+                    (if (progress.running > 0) " 已跳过 ${progress.running} 个仍有进程的应用，请退出对应游戏后重试。" else "") +
+                    (if (progress.skipped > progress.running) " 另有 ${progress.skipped - progress.running} 个应用未能完整检查。" else ""))
             } catch (_: DiscoveryCancelled) {
                 state = state.copy(discoveryMessage = "搜索已取消，已找到的候选仍可选择。")
             } catch (error: Exception) {
@@ -684,6 +699,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         require(state.pending.isEmpty()) { "请先恢复未完成事务" }
         val session = requireNotNull(state.freeSession)
         require(session.snapshot.packageName == state.packageName) { "请切换到导出记录对应的游戏" }
+        withContext(Dispatchers.IO) { device.verifySnapshot(session.snapshot) }
         val plan = withContext(Dispatchers.Default) { FreeEditEngine.plan(session, requireNotNull(state.freeReview) { "请先导入修改后的文件" }) }
         if (plan.outputs.isEmpty()) state = state.copy(message = "没有需要重新打包写回的内容变化。")
         else state = state.copy(preview = plan, previewMode = AssistantMode.FREE)
@@ -711,7 +727,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     fun consumedFolderRequest() { state = state.copy(openFolderRequest = null) }
     fun backupNow() = work {
         require(state.pending.isEmpty()) { "请先恢复未完成事务，再备份当前存档" }
-        state = state.copy(message = "正在关闭游戏并备份本地 .data 与 XML；不会修改存档…")
+        state = state.copy(message = "正在检查游戏是否退出，并备份本地 .data 与 XML…")
         val info = withContext(Dispatchers.IO) { BackupArchive.create(archiveDirectory, device.backup(state.packageName.trim(), android.os.Process.myUid() / 100000)) }
         refreshBackups()
         val tree = state.folder

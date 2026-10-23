@@ -3,7 +3,7 @@ package com.example.soul_knight_save_editor.unlock
 import kotlinx.serialization.json.*
 
 data class GameCandidate(val packageName: String, val label: String = packageName, val version: String = "未知版本", val evidence: List<String>)
-data class DiscoveryProgress(val checked: Int = 0, val total: Int = 0, val skipped: Int = 0)
+data class DiscoveryProgress(val checked: Int = 0, val total: Int = 0, val skipped: Int = 0, val running: Int = 0)
 class DiscoveryCancelled : RuntimeException("已取消搜索")
 
 /** Discovery recognizes a source; editing still validates the full snapshot independently. */

@@ -182,7 +182,7 @@ class RootStorageTest {
         private val pipe = PipedInputStream(64 * 1024)
         private val sender = PipedOutputStream(pipe)
         val sent = CountDownLatch(1)
-        var destroyed = false
+        @Volatile var destroyed = false
         private val input = object : OutputStream() {
             override fun write(b: Int) { error("bulk writes expected") }
             override fun write(b: ByteArray, off: Int, len: Int) {
@@ -217,6 +217,7 @@ class RootStorageTest {
         assertEquals(3, executor.execute(command).exitCode)
         executor.close()
         assertEquals(2, processes.size)
+        processes.forEach { assertTrue(it.destroyedEventually()) }
         assertTrue(processes.all { it.destroyed })
     }
     @Test fun nonWritingTimeoutAndDisconnectReleaseTheirSession() {
@@ -225,13 +226,13 @@ class RootStorageTest {
         val executor = ProcessRootCommandExecutor(listOf("unused"), 30) { process }
         assertEquals(AccessFailureKind.TIMEOUT,
             assertThrows(RootExecutionFailure::class.java) { executor.execute(RootCommandRequest("synthetic", stage = "fixture")) }.kind)
-        assertTrue(process.destroyed)
+        assertTrue(process.destroyedEventually())
         gate.countDown()
         val disconnected = FramedProcess(disconnect = true)
         val reader = ProcessRootCommandExecutor(listOf("unused"), 1000) { disconnected }
         assertEquals(AccessFailureKind.SESSION_DISCONNECTED,
             assertThrows(RootExecutionFailure::class.java) { reader.execute(RootCommandRequest("synthetic", stage = "fixture")) }.kind)
-        assertTrue(disconnected.destroyed)
+        assertTrue(disconnected.destroyedEventually())
     }
     @Test fun timedOutWriteCannotRecoverUntilTheOriginalEndFrameArrives() {
         val gate = CountDownLatch(1)
@@ -249,5 +250,11 @@ class RootStorageTest {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
         while (runCatching { executor.assertIdleForRecovery() }.isFailure && System.nanoTime() < deadline) Thread.sleep(10)
         executor.assertIdleForRecovery()
+    }
+
+    private fun FramedProcess.destroyedEventually(): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+        while (!destroyed && System.nanoTime() < deadline) Thread.sleep(5)
+        return destroyed
     }
 }
