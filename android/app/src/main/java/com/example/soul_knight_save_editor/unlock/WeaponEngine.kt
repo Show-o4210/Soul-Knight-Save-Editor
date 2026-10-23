@@ -27,13 +27,17 @@ object StatisticCodec {
     private fun crypt(mode: Int, bytes: ByteArray) = Cipher.getInstance("DES/CBC/PKCS5Padding").run {
         init(mode, key, StatisticCodec.iv); doFinal(bytes)
     }
-    fun decode(bytes: ByteArray): JsonObject {
+    private fun decoded(bytes: ByteArray): Pair<JsonObject, ShardEncoding> {
         require(bytes.size in 1..UnlockEngine.MAX_BYTES) { "统计文件大小超出支持范围" }
         return try {
-            val text = UnlockEngine.utf8(bytes).filterNot { it in "\r\n\t " }
-            Json.parseToJsonElement(UnlockEngine.utf8(crypt(Cipher.DECRYPT_MODE, Base64.decode(text)))).jsonObject
+            if (hasLegacyBase64Envelope(bytes)) {
+                val text = UnlockEngine.utf8(bytes).filterNot { it in "\r\n\t " }
+                Json.parseToJsonElement(UnlockEngine.utf8(crypt(Cipher.DECRYPT_MODE, Base64.decode(text)))).jsonObject to ShardEncoding.DES_BASE64
+            } else RijndaelCodec.decode(bytes) to ShardEncoding.RIJNDAEL_JSON
         } catch (error: Exception) { throw IllegalArgumentException("统计存档无法按已知格式解码，未作修改", error) }
     }
+    fun decode(bytes: ByteArray): JsonObject = decoded(bytes).first
+    fun format(bytes: ByteArray): ShardEncoding = decoded(bytes).second
     fun encode(root: JsonObject): ByteArray {
         val plain = root.toString().toByteArray(Charsets.UTF_8)
         require(plain.size <= UnlockEngine.MAX_BYTES) { "统计数据过大" }
@@ -41,6 +45,11 @@ object StatisticCodec {
             require(it.size <= UnlockEngine.MAX_BYTES) { "统计文件过大" }
             require(decode(it) == root) { "统计编码复验失败" }
         }
+    }
+    fun encode(root: JsonObject, originalBytes: ByteArray): ByteArray {
+        val (original, encoding) = decoded(originalBytes)
+        if (root == original) return originalBytes
+        return if (encoding == ShardEncoding.RIJNDAEL_JSON) RijndaelCodec.encode(root) else encode(root)
     }
 }
 
@@ -91,6 +100,6 @@ object WeaponEngine {
             "${WeaponCatalog.names[id] ?: id} [$id]：$old → $next" + if (id !in counters(original)) "（新增获取记录）" else ""
         }
         val root = JsonObject(original + ("object2ObtainTime" to JsonObject(values)))
-        return WeaponPatch(if (root == original) bytes else StatisticCodec.encode(root), root, changes)
+        return WeaponPatch(if (root == original) bytes else StatisticCodec.encode(root, bytes), root, changes)
     }
 }

@@ -19,18 +19,19 @@ class SaveScannerTest {
             return SaveFile(path, bytes.getValue(path), "1000:1000", "600", "")
         }
     }
-    @Test fun scanRecognizesSourcesAndIgnoresNewFilesWithoutEditing() {
+    @Test fun scanCapturesBothFormatsAndIgnoresNativeRecoveryCandidatesWithoutEditing() {
         val prefs = "$root/shared_prefs/playerprefs.xml"
         val item = "$root/files/saves/item_data_42_.data"
         val stat = "$root/files/statistic_42_.data"
-        val access = Access(mapOf(SaveSource.PREFS to listOf(prefs), SaveSource.ITEM to listOf(item, "$item.new"), SaveSource.STATISTIC to listOf(stat)), mapOf(prefs to xml, item to byteArrayOf(1), stat to byteArrayOf(2)))
+        val access = Access(mapOf(SaveSource.PREFS to listOf(prefs), SaveSource.ITEM to listOf(item, "$item.new", "${item}_temp", "$item.new_temp"), SaveSource.STATISTIC to listOf(stat)), mapOf(prefs to xml, item to byteArrayOf(1), "$item.new" to byteArrayOf(3), stat to byteArrayOf(2)))
         val snapshot = SaveScanner.scan(access, "com.test.game", 0)
         assertEquals("com.test.game/0", access.stopped)
         assertEquals(prefs, snapshot.prefs!!.path)
-        assertEquals(item, snapshot.items.single().path)
+        assertEquals(listOf(item, "$item.new"), snapshot.items.map { it.path })
         assertEquals(stat, snapshot.statistics.single().path)
         assertEquals(listOf("42"), EditEngine.accounts(snapshot))
-        assertFalse("$item.new" in access.reads)
+        assertTrue("$item.new" in access.reads)
+        assertFalse(access.reads.any { it.endsWith("_temp") })
     }
     @Test fun duplicateGameOrPrefsRequireExplicitResolution() {
         val games = listOf("$root/files/game.data", "$root/files/sub/game.data")
@@ -54,11 +55,12 @@ class SaveScannerTest {
         assertEquals("", SaveLayout.account("item_data.data", SaveSource.ITEM))
         assertEquals("42", SaveLayout.account("statistic_42_.data", SaveSource.STATISTIC))
         assertNull(SaveLayout.account("statistic_42.data", SaveSource.STATISTIC))
-        assertNull(SaveLayout.account("statistic_42_.data.new", SaveSource.STATISTIC))
+        assertEquals("42", SaveLayout.account("statistic_42_.data.new", SaveSource.STATISTIC))
+        assertNull(SaveLayout.account("statistic_42_.data.new_temp", SaveSource.STATISTIC))
         val access = Access(mapOf(SaveSource.ITEM to (0..128).map { "$root/files/item_data_${it}_.data" }), emptyMap())
         assertThrows(IllegalArgumentException::class.java) { SaveScanner.scan(access, "com.test.game", 0) }
     }
-    @Test fun pinnedRefreshReadsNewBytesAtTheSameLocationsWithoutSearching() {
+    @Test fun pinnedRefreshReadsNewBytesAfterBoundedSourceListRecheck() {
         val prefs = "$root/shared_prefs/playerprefs.xml"
         val item = "$root/files/item_data_42_.data"
         val bytes = mutableMapOf(prefs to xml, item to ItemCodec.encode(buildJsonObject { put("AppVersion", 80600); put("value", 1) }))
@@ -68,7 +70,7 @@ class SaveScannerTest {
         val calls = access.listCalls
         bytes[item] = ItemCodec.encode(buildJsonObject { put("AppVersion", 80600); put("value", 2) })
         val refreshed = SaveScanner.refresh(access, target)
-        assertEquals(calls, access.listCalls)
+        assertEquals(calls + 3, access.listCalls)
         assertEquals(snapshot.items.single().path, refreshed.items.single().path)
         assertEquals(1, ItemCodec.decode(snapshot.items.single().bytes)["value"]!!.jsonPrimitive.int)
         assertEquals(2, ItemCodec.decode(refreshed.items.single().bytes)["value"]!!.jsonPrimitive.int)
@@ -80,10 +82,10 @@ class SaveScannerTest {
         val target = PinnedSaveTarget.from(source, "42")
         val missing = Access(mapOf(SaveSource.PREFS to listOf("$root/shared_prefs/other.xml")), emptyMap())
         assertThrows(Exception::class.java) { SaveScanner.refresh(missing, target) }
-        assertEquals(0, missing.listCalls)
+        assertEquals(3, missing.listCalls)
         val changed = Access(emptyMap(), mapOf(prefs to String(xml).replace("42_", "99_").toByteArray()))
         assertThrows(IllegalArgumentException::class.java) { SaveScanner.refresh(changed, target) }
-        assertEquals(0, changed.listCalls)
+        assertEquals(3, changed.listCalls)
     }
     @Test fun pinnedPathsAreValidatedBeforeClosingAnyGame() {
         val access = Access(emptyMap(), emptyMap())
@@ -91,6 +93,19 @@ class SaveScannerTest {
         assertThrows(IllegalArgumentException::class.java) { SaveScanner.refresh(access, target) }
         assertNull(access.stopped)
         assertTrue(access.reads.isEmpty())
+    }
+    @Test fun pinnedLegacyLocationCannotMissANewlyCreatedFormatOfTheSameAccount() {
+        val prefs = "$root/shared_prefs/playerprefs.xml"
+        val item = "$root/files/item_data_42_.data"
+        val access = Access(mapOf(SaveSource.PREFS to listOf(prefs), SaveSource.ITEM to listOf(item)),
+            mapOf(prefs to xml, item to byteArrayOf(1)))
+        val pinned = PinnedSaveTarget.from(SaveScanner.scan(access, "com.test.game", 0), "42")
+        val migrated = Access(mapOf(SaveSource.ITEM to listOf(item, "$item.new")), access.bytes)
+        val error = assertThrows(IllegalArgumentException::class.java) { SaveScanner.refresh(migrated, pinned) }
+        assertTrue(error.message!!.contains("格式已变化"))
+        assertTrue(migrated.reads.isEmpty())
+        val otherAccount = Access(mapOf(SaveSource.ITEM to listOf(item, "$root/files/item_data_99_.data.new")), access.bytes)
+        assertEquals(item, SaveScanner.refresh(otherAccount, pinned).items.single().path)
     }
     @Test fun clearingStaleContentKeepsOnlyTheSessionBookmarkAndChangingPackageDropsIt() {
         val path = "$root/shared_prefs/prefs.xml"

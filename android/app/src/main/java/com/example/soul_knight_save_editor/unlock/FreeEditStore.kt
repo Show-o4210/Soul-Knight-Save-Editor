@@ -28,6 +28,7 @@ class FreeEditStore(private val directory: File) {
         val manifest = buildJsonObject {
             put("schema", 1); put("id", session.id); put("directory", session.directory)
             put("package", session.snapshot.packageName); put("user", session.snapshot.user)
+            put("keepReadingModes", session.keepReadingModes)
             put("files", JsonArray(files))
             put("entries", JsonArray(session.entries.map { entry -> buildJsonObject {
                 put("path", entry.path); put("name", entry.name); put("codec", entry.codec.name); put("plainHash", entry.plainHash)
@@ -74,6 +75,8 @@ class FreeEditStore(private val directory: File) {
             require(FreeEditEngine.isXml(entry.path) == (entry.codec == FreeCodec.PREFS_XML)) { "自由编辑文件类型不一致" }
             require(UnlockEngine.sha(FreeEditEngine.plain(original, entry.codec)) == entry.plainHash) { "自由编辑对应关系校验失败" }
         }
-        return FreeEditSession(id, manifest.getValue("directory").jsonPrimitive.content, snapshot, entries)
+        val keepReadingModes = manifest["keepReadingModes"]?.jsonPrimitive?.boolean
+            ?: files.any { it.path.endsWith(".data.new") }
+        return FreeEditSession(id, manifest.getValue("directory").jsonPrimitive.content, snapshot, entries, keepReadingModes)
     }
 }

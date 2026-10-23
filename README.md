@@ -2,7 +2,7 @@
 
 《元气骑士》本地存档编辑工具，可修改角色、皮肤、物品与武器数据，支持修改预览、备份和还原。
 
-**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.4-rc01/SoulKnightSaveEditor-2.0.4-rc01.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
+**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc02/SoulKnightSaveEditor-2.0.5-rc02.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
 
 ## 使用要求
 
@@ -14,9 +14,9 @@
 | 存档访问 | 默认使用原生 Root，也可使用通过 Root 启动的 Shizuku；不支持 Shizuku 的 ADB 模式 |
 | 游戏版本 | 适配 8.7.0，保留 8.6.0 支持；其他版本与渠道需单独验证 |
 
-当前 Android 版本：**`2.0.4-rc01`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
+当前 Android 版本：**`2.0.5-rc02`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
 
-社区测试候选 **`2.0.5-rc02` / versionCode 27** 已打包，暂未创建 GitHub Release。新增游戏运行检测，读取、预览和写回前要求所选游戏彻底退出，并修复 Root 超时清理可能持续等待的问题；范围与验证结果见[候选说明](docs/releases/2.0.5-rc02.md)。候选还包含普通武器进化、神话武器、补充材料和 XML 自由编辑等功能。
+本版新增武器进化、神话武器、重新锁定与 XML 自由编辑，修复光速虚拟机读取及 B 站服新格式材料修改。**最近实测：2026-10-23，模拟器测试通过，适配 8.7.0。** 具体变动见[发布说明](docs/releases/2.0.5-rc02.md)。
 
 **修改前请先备份原始存档，并保存到助手以外的文件夹。** 从旧 alpha / Debug 包升级时，请先阅读[备份与更新](docs/help/backup-and-update.md)，避免签名不同导致无法覆盖安装。
 
@@ -34,16 +34,17 @@
 
 | 功能 | 操作说明 |
 | --- | --- |
-| 角色与皮肤 | 批量或逐项解锁，只处理识别出的现有条目 |
+| 角色与皮肤 | 批量或逐项解锁、重新锁定；保留基础内容，未知锁值跳过 |
 | 等级、技能与宠物 | 将现有角色升至至少 7 级，保留更高等级；解锁已有技能、宠物条目 |
 | 材料、种子等物品 | 按类别增加数量，或单独修改；例如材料每项 +1000，生物质 25 → 1025 |
 | 小鱼干与试玩券 | 设置目标数量，例如原有 5、输入 20，最终为 20；留空不改，输入 0 则清零 |
 | 磁带、蓝图、设施与饰品 | 磁带数量设为 1、研究蓝图、补齐设施、补齐饰品并充能 |
 | 武器获取次数 | 批量 +8，或搜索武器逐项增加；其他锻造条件仍由游戏判断 |
 | 武器皮肤 | 批量解锁并保留当前皮肤；专家模式可逐项解锁、换肤或选择最高品质 |
+| 武器进化与神话武器 | 普通武器进化；神话武器解锁、升级至 3 级 |
 | 备份与还原 | 手动 / 自动备份、ZIP 导入、原件还原和重命名；默认不限数量，可设置保留上限 |
 
-可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步，也不处理 `.data.new` 文件。
+可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步。本版支持 `.data.new` 的扫描、备份与读写，以及 B 站服读取开关的账号绑定，详见[发布说明](docs/releases/2.0.5-rc02.md)。
 
 ### 第一次使用
 
@@ -73,13 +74,13 @@
 
 | 项目 | 已有记录 |
 | --- | --- |
-| 游戏渠道 | **vivo 渠道 8.6.0**：有用户反馈角色、皮肤解锁成功；**8.7.0**：维护者反馈模拟器测试通过，未注明具体渠道，尚无社区独立复测反馈 |
-| 虚拟机 / 模拟器 | **Android 9 虚拟机**：完成原生 Root 读取、游戏列表和武器皮肤预览检查，未实际写回；另有 **8.7.0 模拟器实测**反馈，但未登记模拟器品牌或具体版本 |
-| 2.0.5 候选 | **2026-10-23**，维护者确认 rc01 武器进化、神话武器等功能在虚拟机验收通过；rc02 另验证了运行拦截及退出后重试读取，详见[本轮说明](docs/releases/2.0.5-rc02.md) |
+| 游戏渠道 | **vivo 渠道 8.6.0**：用户反馈角色、皮肤解锁成功；**B 站服 8.7.0**：2026-10-23 原生 Root 实测材料修改生效，未选材料保留 |
+| 虚拟机 / 模拟器 | **Android 9 虚拟机**：完成 B 站 8.7 材料实际写回与游戏内核对；**光速 Android 7.1.2**：原生 Root、Shizuku Root 均通过读取，未验收真实游戏写回 |
+| 武器进化与神话武器 | **2026-10-23**，维护者确认在虚拟机验收通过；其他条目和设备渠道继续收集反馈，详见[本版说明](docs/releases/2.0.5-rc02.md) |
 | Root 方式 | **原生 Root（Magisk）**与**通过 Root 启动的 Shizuku**：均通过测试文件读写、备份和恢复检查；该项未涉及真实游戏存档写回 |
-| Android 系统 | **Android 9** 有虚拟机读取与预览记录；**Android 16** 有 Pixel 6 实体设备上的 Root / Shizuku 测试文件检查记录。**Android 7.0 及以上**是最低运行要求，不代表每个系统版本都已实测 |
+| Android 系统 | 已有 **Android 7.1.2** 读取、**Android 9** 真实存档修改与 **Android 16** Pixel 6 测试文件检查记录；Android 7.0 及以上为最低要求，不代表每个版本均已实测 |
 
-以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[版本发布说明](docs/releases/2.0.4-rc01.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
+以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[版本发布说明](docs/releases/2.0.5-rc02.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
 
 ## 文档与反馈
 
@@ -89,7 +90,7 @@
 | 备份、还原与安装更新 | [备份与更新](docs/help/backup-and-update.md) |
 | 自由编辑文件 | [自由编辑](docs/help/free-editing.md) · [图文教程](docs/help/getting-started.md#free-editing) |
 | 游戏版本与存档读取 | [版本选择](docs/help/game-versions.md) · [本地读取](docs/help/local-data-reading.md) |
-| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.4-rc01.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
+| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc02.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
 | 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) |
 | Python 桌面版 | [使用说明](desktop/README.md)，功能与 Android 版分别维护 |
 

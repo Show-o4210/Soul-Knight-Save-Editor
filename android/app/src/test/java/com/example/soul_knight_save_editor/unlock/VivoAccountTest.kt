@@ -51,26 +51,26 @@ class VivoAccountTest {
             assertFalse(SaveAccountId.roleUnlock.matches("${id}_c0_unlock"))
             assertNull(SaveLayout.account("item_data_${id}_.data", SaveSource.ITEM))
         }
-        assertNull(SaveLayout.account("item_data_${account}_.data.new", SaveSource.ITEM))
+        assertEquals(account, SaveLayout.account("item_data_${account}_.data.new", SaveSource.ITEM))
     }
     @Test fun discoveryScanAndPinnedRefreshBindTheChannelAccountWithoutDefaultFallback() {
         val prefs = "$root/shared_prefs/playerprefs.xml"
         val shard = "$root/files/item_data_${account}_.data"
         val values = mutableMapOf(prefs to "<map>${xml(account)}</map>".toByteArray(),
             shard to item(), "$root/files/item_data.data" to item(0),
-            "$root/files/statistic_${account}_.data" to statistic(), "$shard.new" to byteArrayOf(1))
+            "$root/files/statistic_${account}_.data" to statistic(), "$shard.new" to RijndaelCodec.encode(ItemCodec.decode(item())))
         assertTrue(SaveDiscovery.xml(values.getValue(prefs)))
         val access = Access(values)
         val snapshot = SaveScanner.scan(access, pkg, 0)
         assertEquals(listOf(account), EditEngine.accounts(snapshot))
-        assertEquals(2, snapshot.items.size)
-        assertEquals(shard, EditEngine.item(snapshot, account)!!.path)
+        assertEquals(3, snapshot.items.size)
+        assertEquals("$shard.new", EditEngine.item(snapshot, account)!!.path)
         assertNotNull(snapshot.prefs)
         val pinned = PinnedSaveTarget.from(snapshot, account)
         val searches = access.searches
-        values[shard] = ItemEngine.edit(values.getValue(shard), ItemSelection(increments = mapOf(cell to 2))).bytes
+        values["$shard.new"] = ItemEngine.edit(values.getValue("$shard.new"), ItemSelection(increments = mapOf(cell to 2))).bytes
         assertEquals(5, ItemEngine.quantity(ItemCodec.decode(EditEngine.item(SaveScanner.refresh(access, pinned), account)!!.bytes), cell))
-        assertEquals(searches, access.searches)
+        assertEquals(searches + 3, access.searches)
         values[prefs] = "<map>${xml(other)}</map>".toByteArray()
         assertThrows(IllegalArgumentException::class.java) { SaveScanner.refresh(access, pinned) }
     }
@@ -130,7 +130,7 @@ class VivoAccountTest {
         val plan = EditEngine.preview(snapshot, id, UnlockSelection(heroes = setOf(hero.index), pets = true),
             ItemSelection(increments = mapOf(cell to 1000)), WeaponSelection(increments = mapOf("weapon_359" to 8)))
         assertTrue(plan.outputs.isNotEmpty())
-        assertTrue(plan.outputs.keys.none { it.endsWith("/item_data.data") || it.endsWith("/statistic.data") || it.endsWith(".new") })
+        assertTrue(plan.outputs.keys.none { it.substringAfterLast('/') in setOf("item_data.data", "item_data.data.new", "statistic.data", "statistic.data.new") })
         val updated = snapshot.copy(
             prefs = snapshot.prefs!!.let { it.copy(bytes = plan.outputs[it.path] ?: it.bytes) },
             game = snapshot.game?.let { it.copy(bytes = plan.outputs[it.path] ?: it.bytes) },

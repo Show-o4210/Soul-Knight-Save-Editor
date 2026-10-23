@@ -16,6 +16,7 @@ fun AssistantState.selectTab(tab: WorkspaceTab): AssistantState = copy(
 
 fun AssistantState.selectPackage(value: String): AssistantState = copy(
     packageName = value, pinnedTarget = null, snapshot = null, catalog = null, petStates = emptyList(), petMessage = "请先扫描宠物存档", accounts = emptyList(),
+    relockInventory = null, relockMessage = "请先读取存档以核对可重新锁定内容",
     freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(), freeAccounts = emptyList(), freeAccount = null,
     freeSession = null, freeReview = null, freeOpenRequest = null,
     progression = emptyList(), weaponStates = emptyList(), expertItems = ItemChoices(), expertWeapons = WeaponChoices(), choices = ModeChoices(), itemChoices = ItemChoices(), itemRoot = null,
@@ -34,6 +35,7 @@ fun AssistantState.selectPackage(value: String): AssistantState = copy(
 /** Discard stale content while retaining a session location unless the target version changes. */
 fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): AssistantState = copy(
     snapshot = null, pinnedTarget = if (clearTarget) null else pinnedTarget, catalog = null, accounts = emptyList(),
+    relockInventory = null, relockMessage = "请先读取存档以核对可重新锁定内容",
     freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(), freeAccounts = emptyList(), freeAccount = null, freeReview = null,
     progression = emptyList(), weaponStates = emptyList(), petStates = emptyList(), choices = ModeChoices(),
     itemRoot = null, itemChoices = ItemChoices(), expertItems = ItemChoices(), expertWeapons = WeaponChoices(),

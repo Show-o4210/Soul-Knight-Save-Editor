@@ -112,6 +112,58 @@ class SaveRestoreTest {
         assertEquals("1", nodes.getValue("OpenRijTest_99").getAttribute("value"))
         assertTrue(String(device.read(prefs.path).bytes).contains("keep me"))
     }
+    @Test fun completeXmlRestoreResetsRawScopesWithoutTreatingChillyUidsAsFileAccounts() {
+        val source = file("shared_prefs/game.xml", """<map>
+            <string name="AccountSaveSettingsIds">%7B%2242%22%3A%22700%22%7D</string>
+            <int name="OpenRijTest_42" value="1"/><int name="OpenNewtonJsonTest_42" value="1"/>
+            <int name="OpenRijTest_700" value="1"/><int name="OpenNewtonJsonTest_700" value="1"/>
+            <int name="OpenRijTest_900" value="1"/><int name="OpenNewtonJsonTest_900" value="1"/>
+            <int name="OpenRijTest" value="1"/><string name="unchanged">keep me</string>
+        </map>""".trimIndent())
+        val device = Device().apply { files[source.path] = source }
+        val repository = SaveRepository(temp.newFolder(), device)
+        repository.restore(payload(source))
+        val nodes = UnlockEngine.prefs(device.read(source.path).bytes)
+        for (scope in listOf("42", "700", "900")) for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest"))
+            assertEquals("0", nodes.getValue("${flag}_$scope").getAttribute("value"))
+        assertEquals("0", nodes.getValue("OpenRijTest").getAttribute("value"))
+        assertEquals("keep me", nodes.getValue("unchanged").textContent)
+        assertEquals("%7B%2242%22%3A%22700%22%7D", nodes.getValue("AccountSaveSettingsIds").textContent)
+        assertTrue(repository.pending().isEmpty())
+    }
+    @Test fun newShardOnlyRestoreBindsCurrentFallbackXmlToItsMappedScope() {
+        val prefs = file("shared_prefs/game.xml", """<map>
+            <string name="AccountSaveSettingsIds">%7B%2242%22%3A%22700%22%2C%2299%22%3A%22900%22%7D</string>
+            <int name="OpenRijTest_42" value="1"/><int name="OpenNewtonJsonTest_42" value="1"/>
+            <int name="OpenRijTest_700" value="1"/><int name="OpenNewtonJsonTest_700" value="1"/>
+            <int name="OpenRijTest_900" value="1"/><int name="OpenNewtonJsonTest_900" value="1"/>
+        </map>""".trimIndent())
+        val item = file("files/item_data_42_.data.new", "before")
+        val device = Device().apply { files[prefs.path] = prefs; files[item.path] = item.copy(bytes = "after".toByteArray()) }
+        val repository = SaveRepository(temp.newFolder(), device)
+        repository.restore(payload(item), prefs.path)
+        val nodes = UnlockEngine.prefs(device.read(prefs.path).bytes)
+        for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
+            assertEquals("0", nodes.getValue("${flag}_700").getAttribute("value"))
+            assertEquals("1", nodes.getValue("${flag}_42").getAttribute("value"))
+            assertEquals("1", nodes.getValue("${flag}_900").getAttribute("value"))
+        }
+        assertArrayEquals(item.bytes, device.read(item.path).bytes)
+        assertTrue(repository.pending().isEmpty())
+    }
+    @Test fun unresolvedFallbackBindingNeverClearsAUniqueForeignScope() {
+        val prefs = file("shared_prefs/game.xml", """<map>
+            <string name="AccountSaveSettingsIds">%7B%2299%22%3A%22700%22%7D</string>
+            <string name="last_chilly_uid">700</string><int name="OpenRijTest_700" value="1"/>
+        </map>""".trimIndent())
+        val item = file("files/item_data_42_.data", "before")
+        val device = Device().apply { files[prefs.path] = prefs; files[item.path] = item.copy(bytes = "after".toByteArray()) }
+        val repository = SaveRepository(temp.newFolder(), device)
+        repository.restore(payload(item), prefs.path)
+        assertArrayEquals(prefs.bytes, device.read(prefs.path).bytes)
+        assertArrayEquals(item.bytes, device.read(item.path).bytes)
+        assertTrue(repository.pending().isEmpty())
+    }
     @Test fun missingFileAndForeignPathsRefuseBeforeWritingAnyFile() {
         val source = file("files/local.data", "old")
         val device = Device()

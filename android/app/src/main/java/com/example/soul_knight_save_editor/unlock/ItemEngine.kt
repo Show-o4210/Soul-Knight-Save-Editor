@@ -56,13 +56,17 @@ object ItemCodec {
     private fun crypt(mode: Int, bytes: ByteArray) = Cipher.getInstance("DES/CBC/PKCS5Padding").run {
         init(mode, key, ItemCodec.iv); doFinal(bytes)
     }
-    fun decode(bytes: ByteArray): JsonObject {
+    private fun decoded(bytes: ByteArray): Pair<JsonObject, ShardEncoding> {
         require(bytes.size in 1..UnlockEngine.MAX_BYTES) { "物品文件大小超出支持范围" }
-        val text = UnlockEngine.utf8(bytes).filterNot { it in "\r\n\t " }
         return try {
-            Json.parseToJsonElement(UnlockEngine.utf8(crypt(Cipher.DECRYPT_MODE, Base64.decode(text)))).jsonObject
+            if (hasLegacyBase64Envelope(bytes)) {
+                val text = UnlockEngine.utf8(bytes).filterNot { it in "\r\n\t " }
+                Json.parseToJsonElement(UnlockEngine.utf8(crypt(Cipher.DECRYPT_MODE, Base64.decode(text)))).jsonObject to ShardEncoding.DES_BASE64
+            } else RijndaelCodec.decode(bytes) to ShardEncoding.RIJNDAEL_JSON
         } catch (error: Exception) { throw IllegalArgumentException("物品存档无法按已知格式解码，未作修改", error) }
     }
+    fun decode(bytes: ByteArray): JsonObject = decoded(bytes).first
+    fun format(bytes: ByteArray): ShardEncoding = decoded(bytes).second
     fun encode(root: JsonObject): ByteArray {
         val plain = root.toString().toByteArray(Charsets.UTF_8)
         require(plain.size <= UnlockEngine.MAX_BYTES) { "物品数据过大" }
@@ -70,6 +74,12 @@ object ItemCodec {
             require(it.size <= UnlockEngine.MAX_BYTES) { "物品文件过大" }
             require(decode(it) == root) { "物品编码复验失败" }
         }
+    }
+    /** Preserve the source format and return its exact bytes when no JSON value changed. */
+    fun encode(root: JsonObject, originalBytes: ByteArray): ByteArray {
+        val (original, encoding) = decoded(originalBytes)
+        if (root == original) return originalBytes
+        return if (encoding == ShardEncoding.RIJNDAEL_JSON) RijndaelCodec.encode(root) else encode(root)
     }
 }
 
@@ -185,6 +195,6 @@ object ItemEngine {
             }
         }
         val root = JsonObject(result)
-        return ItemPatch(if (root == original) bytes else ItemCodec.encode(root), root, changes)
+        return ItemPatch(if (root == original) bytes else ItemCodec.encode(root, bytes), root, changes)
     }
 }

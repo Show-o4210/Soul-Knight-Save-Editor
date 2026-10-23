@@ -14,7 +14,8 @@ class ShizukuSaveService(context: Context) : IShizukuSaveService.Stub() {
     private val instance = java.util.UUID.randomUUID().toString()
     private val gate = ShizukuOperationGate()
     private val worker = Executors.newSingleThreadExecutor()
-    private val storage = ShellSaveAccess(ProcessRootCommandExecutor(listOf("/system/bin/sh")), AccessBackend.SHIZUKU_ROOT)
+    private val storage = ShellSaveAccess(ProcessRootCommandExecutor(listOf("/system/bin/sh")), AccessBackend.SHIZUKU_ROOT,
+        context.applicationInfo.sourceDir)
 
     private fun authorize() {
         check(Binder.getCallingUid() == ownUid) { "仅允许本应用访问 Shizuku 存档服务" }

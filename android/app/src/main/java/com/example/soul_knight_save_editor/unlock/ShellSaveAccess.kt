@@ -4,16 +4,20 @@ import android.util.Base64
 import java.util.UUID
 
 /** Fixed privileged file operations, shared by both backends; no public command execution. */
-open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: AccessBackend) : BaseSaveAccess(backend) {
+open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: AccessBackend,
+    private val helperApk: String? = null) : BaseSaveAccess(backend) {
     private val pathPattern = SaveLayout.restorablePath
-    private val backupPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+\\.data$")
+    private val backupPattern = SaveLayout.backupDataPath
     private val directoryPattern = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+(?:/(?:files(?:/[a-zA-Z0-9_.-]+)?|shared_prefs))?$")
     private var identity = "未检查"
     private var ready = false
+    private enum class DigestTool { SYSTEM, HELPER }
+    private var digestTool: DigestTool? = null
+    private val emptySha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     final override var latestDiagnostic: AccessDiagnostic? = null
         private set
     private fun quote(text: String) = "'" + text.replace("'", "'\\''") + "'"
-    override fun close() { ready = false; executor.close() }
+    override fun close() { ready = false; digestTool = null; executor.close() }
 
     private fun context(path: String): Pair<String, Int> {
         val match = Regex("^/data/(?:user/([0-9]+)|data)/([^/]+)(?:/|$)").find(path)
@@ -29,6 +33,7 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
             .also { latestDiagnostic = it }
     }
     private fun sanitize(output: String): String {
+        if (unsupportedStatLinkOption(output)) return "旧版 stat 不支持 -L 参数"
         // Only fixed errno/command failure text is shown. Even short account IDs can occur in an operand.
         val reasons = listOf("Permission denied", "Operation not permitted", "No such file or directory", "Not a directory",
             "Input/output error", "Read-only file system", "No space left on device", "Invalid argument", "invalid option",
@@ -45,7 +50,10 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         val request = RootCommandRequest(command, input, stage, packageName, user, writing, sensitive,
             remainingReadMillis(timeoutMillis ?: 45_000)) { cancellation?.invoke() == true }
         val output = try { executor.execute(request) } catch (error: RootExecutionFailure) {
-            if (error.kind in setOf(AccessFailureKind.IO, AccessFailureKind.SESSION_DISCONNECTED, AccessFailureKind.TIMEOUT)) ready = false
+            if (error.kind in setOf(AccessFailureKind.IO, AccessFailureKind.SESSION_DISCONNECTED, AccessFailureKind.TIMEOUT)) {
+                ready = false
+                digestTool = null
+            }
             val detail = diagnostic(request, null, error.elapsedMillis, error.mergedOutput)
             val message = when (error.kind) {
                 AccessFailureKind.TIMEOUT -> "${backend.label}操作超时；如已开始写回，请先检查恢复提示"
@@ -97,13 +105,17 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
             throw AccessFailure(AccessFailureKind.WRITE_NOT_IDLE, "仍有结果未确认的写任务，暂不能恢复", latestDiagnostic, true, error)
         }
     }
-    private fun canonical(path: String, pkg: String, user: Int): String {
-        val actual = run("readlink -f ${quote(path)}", "规范化路径检查", pkg, user).trim()
+    private fun canonicalPath(path: String, pkg: String, user: Int, stage: String = "规范化路径检查"): String {
+        val actual = run("readlink -f ${quote(path)}", stage, pkg, user).trim()
         require(actual == path || actual.replaceFirst("/data/user/0/", "/data/data/") == path.replaceFirst("/data/user/0/", "/data/data/")) { "存档路径指向范围外位置，已停止" }
+        return actual
+    }
+    private fun canonical(path: String, pkg: String, user: Int): String {
+        canonicalPath(path, pkg, user)
         return quote(path)
     }
     private fun checked(path: String, backupOnly: Boolean = false): String {
-        require((pathPattern.matches(path) || backupOnly && backupPattern.matches(path)) && !path.contains("..") && !path.endsWith(".new")) { "路径不在本地存档范围内" }
+        require((pathPattern.matches(path) || backupOnly && backupPattern.matches(path)) && !path.contains("..")) { "路径不在本地存档范围内" }
         val (pkg, user) = context(path)
         ensureRoot(pkg, user)
         return canonical(path, pkg, user)
@@ -131,15 +143,53 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         ensureRoot(pkg, user)
         // C-locale stat reports platform errno; only exact ENOENT/ENOTDIR diagnostics mean absent.
         val (request, output) = result("LC_ALL=C stat -L -c '%F' ${quote(directory)}", "目标目录检查", pkg, user)
-        if (output.exitCode != 0 && absentDirectory(output, directory)) {
-            diagnostic(request, output.exitCode, output.elapsedMillis, "目标目录明确不存在或路径组件不是目录")
-            return false
+        if (output.exitCode in 1..2 && unsupportedStatLinkOption(output.mergedOutput)) {
+            diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+            return legacyDirectoryExists(directory, pkg, user)
         }
-        val type = successful(request, output).trim()
-        require(type in setOf("directory", "regular file", "regular empty file", "symbolic link", "fifo", "socket", "character special file", "block special file")) { "无法识别目标目录类型" }
+        val type = directoryType(request, output, directory) ?: return false
         if (type != "directory") return false
         canonical(directory, pkg, user)
         return true
+    }
+    private fun legacyDirectoryExists(directory: String, pkg: String, user: Int): Boolean {
+        val stage = "兼容目录检查（旧版 stat 不支持 -L）"
+        val (request, output) = result("LC_ALL=C stat -c '%F' ${quote(directory)}", stage, pkg, user)
+        val type = directoryType(request, output, directory) ?: return false
+        if (type != "directory" && type != "symbolic link") return false
+        // Old stat does not follow a final symlink. Resolve it, enforce the same boundary as
+        // the primary probe, and inspect the resolved path instead of trusting the link type.
+        val actual = canonicalPath(directory, pkg, user, "兼容路径检查（旧版 stat 不支持 -L）")
+        if (type == "symbolic link") {
+            val (resolvedRequest, resolvedOutput) = result("LC_ALL=C stat -c '%F' ${quote(actual)}", stage, pkg, user)
+            return directoryType(resolvedRequest, resolvedOutput, actual) == "directory"
+        }
+        return true
+    }
+    private fun directoryType(request: RootCommandRequest, output: RootCommandResult, directory: String): String? {
+        if (output.exitCode != 0 && absentDirectory(output, directory)) {
+            diagnostic(request, output.exitCode, output.elapsedMillis, "目标目录明确不存在或路径组件不是目录")
+            return null
+        }
+        val type = successful(request, output).trim()
+        require(type in setOf("directory", "regular file", "regular empty file", "symbolic link", "fifo", "socket", "character special file", "block special file")) { "无法识别目标目录类型" }
+        return type
+    }
+    private fun unsupportedStatLinkOption(output: String): Boolean {
+        if (output.length > 16 * 1024) return false
+        val lines = output.trim().lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+        val errors = setOf("stat: Unknown option L", "stat: Unknown option 'L'", "stat: invalid option -- 'L'",
+            "stat: invalid option -- L", "stat: unrecognized option '-L'")
+        val help = setOf("See stat --help", "See stat --help for more information.",
+            "Try 'stat --help' for more information.", "usage: stat [-f] [-c FORMAT] FILE...",
+            "Display status of files or filesystems.", "-f display filesystem status instead of file status",
+            "-c Output specified FORMAT string instead of default",
+            "The valid format escape sequences for files:", "The valid format escape sequences for filesystems:")
+        // Android 7 toybox emits its entire usage text before the final error. Only accept
+        // that known help structure plus a single exact L-option error, never operand errors.
+        return lines.count { it in errors } == 1 && lines.all { line ->
+            line in errors || line in help || Regex("^%[a-zA-Z]\\s+[^\\r\\n]+$").matches(line)
+        }
     }
     private fun absentDirectory(output: RootCommandResult, path: String): Boolean {
         if (output.exitCode != 1) return false
@@ -147,6 +197,51 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         val suffix = listOf("No such file or directory", "Not a directory").firstOrNull { line.endsWith(": $it") } ?: return false
         val prefix = line.removeSuffix(": $suffix")
         return prefix in setOf("stat: $path", "stat: '$path'", "stat: cannot stat '$path'", "stat: cannot statx '$path'")
+    }
+    private fun missingSystemDigest(output: RootCommandResult): Boolean = output.exitCode == 127 &&
+        Regex("^(?:(?:/system/bin/)?sh: (?:<stdin>\\[[0-9]+\\]: )?)?sha256sum: (?:not found|inaccessible or not found)$")
+            .matches(output.mergedOutput.trim())
+    private fun helperCommand(): String {
+        val apk = requireNotNull(helperApk) { "设备缺少 sha256sum，且兼容校验入口不可用" }
+        require(apk.startsWith('/') && apk.endsWith(".apk") && apk.length <= 4096 &&
+            apk.none { it == '\u0000' || it == '\n' || it == '\r' }) { "兼容校验入口无效" }
+        return "CLASSPATH=${quote(apk)} /system/bin/app_process /system/bin com.example.soul_knight_save_editor.unlock.LegacySha256"
+    }
+    private fun digestCommand(tool: DigestTool, quotedPath: String): String = when (tool) {
+        DigestTool.SYSTEM -> "sha256sum $quotedPath"
+        DigestTool.HELPER -> "${helperCommand()} $quotedPath"
+    }
+    private fun digestValue(output: String): String {
+        val value = output.trim().substringBefore(' ')
+        require(Regex("[a-f0-9]{64}").matches(value)) { "SHA-256 校验输出无法识别" }
+        return value
+    }
+    private fun enableHelperDigest(pkg: String, user: Int): DigestTool {
+        val (request, output) = result("${helperCommand()} --self-test", "旧版 SHA-256 兼容自检", pkg, user)
+        require(successful(request, output).trim() == emptySha256) { "兼容 SHA-256 自检失败，已停止存档操作" }
+        return DigestTool.HELPER.also { digestTool = it }
+    }
+    private fun readDigest(path: String, pkg: String, user: Int): String {
+        if (digestTool == DigestTool.HELPER)
+            return digestValue(run(digestCommand(DigestTool.HELPER, quote(path)), "兼容读取完整性校验", pkg, user))
+        val (request, output) = result(digestCommand(DigestTool.SYSTEM, quote(path)), "读取完整性校验", pkg, user)
+        if (missingSystemDigest(output) && helperApk != null) {
+            diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+            val tool = enableHelperDigest(pkg, user)
+            return digestValue(run(digestCommand(tool, quote(path)), "兼容读取完整性校验", pkg, user))
+        }
+        return digestValue(successful(request, output))
+    }
+    private fun writeDigestTool(pkg: String, user: Int): DigestTool {
+        digestTool?.let { return it }
+        // Establish support before starting a write. Never replay a transaction to try another tool.
+        val (request, output) = result("sha256sum /dev/null", "写回 SHA-256 只读自检", pkg, user)
+        if (missingSystemDigest(output) && helperApk != null) {
+            diagnostic(request, output.exitCode, output.elapsedMillis, output.mergedOutput)
+            return enableHelperDigest(pkg, user)
+        }
+        require(digestValue(successful(request, output)) == emptySha256) { "系统 SHA-256 自检失败，已停止写回" }
+        return DigestTool.SYSTEM.also { digestTool = it }
     }
     final override fun read(path: String) = readFile(path, false)
     final override fun readBackup(path: String) = readFile(path, true)
@@ -161,7 +256,7 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         val bytes = Base64.decode(run("base64 $q", "读取存档内容", pkg, user, sensitive = true), Base64.DEFAULT)
         if (bytes.size.toLong() != metadata[2].toLong())
             throw AccessFailure(AccessFailureKind.SOURCE_CHANGED, "读取期间存档发生变化，请保持游戏关闭后重新读取", latestDiagnostic)
-        val remoteHash = run("sha256sum $q", "读取完整性校验", pkg, user).trim().substringBefore(' ')
+        val remoteHash = readDigest(path, pkg, user)
         if (UnlockEngine.sha(bytes) != remoteHash)
             throw AccessFailure(AccessFailureKind.SOURCE_CHANGED, "读取期间存档发生变化，请保持游戏关闭后重新读取", latestDiagnostic)
         return SaveFile(path, bytes, metadata[0], metadata[1], label)
@@ -172,12 +267,14 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
         require(bytes.size in 1..UnlockEngine.MAX_BYTES)
         require(Regex("\\d+:\\d+").matches(file.owner) && Regex("[0-7]{3,4}").matches(file.mode))
         require(file.context.isEmpty() || Regex("[a-zA-Z0-9_:,.-]+").matches(file.context))
+        val hashTool = writeDigestTool(pkg, user)
         val temp = quote(file.path + ".unlock-" + UUID.randomUUID() + ".tmp")
         val label = if (file.context.isNotEmpty()) "chcon ${quote(file.context)} $temp && " else ""
         val encoded = Base64.encode(bytes, Base64.NO_WRAP)
         val command = "umask 077; test ! -e $temp || exit 1; trap ${quote("rm -f $temp")} EXIT; " +
             "base64 -d > $temp && chown ${file.owner} $temp && chmod ${file.mode} $temp && " + label +
-            "test \"\$(sha256sum $temp | cut -d ' ' -f 1)\" = '${UnlockEngine.sha(bytes)}' && sync && mv -f $temp $target && sync"
+            "_sk_hash=\$(${digestCommand(hashTool, temp)}) && " +
+            "test \"\${_sk_hash%% *}\" = '${UnlockEngine.sha(bytes)}' && sync && mv -f $temp $target && sync"
         run(command, "事务文件替换", pkg, user, encoded, writing = true, sensitive = true)
     }
     final override fun list(root: String, source: SaveSource): List<String> {
@@ -223,11 +320,11 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
             }
         }
         if (exists(files)) {
-            val found = run("find ${quote(files)} -maxdepth 2 -type f \\( -name 'game.data' -o -name 'item_data*.data' \\)", "搜索数据存档位置", packageName, user)
+            val found = run("find ${quote(files)} -maxdepth 2 -type f \\( -name 'game.data' -o -name 'item_data*.data*' \\)", "搜索数据存档位置", packageName, user)
                 .lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
             require(found.size <= 128) { "候选数据文件过多，暂不自动搜索" }
             found.forEach { path -> require(path.startsWith("$files/") && !path.contains("..") && path.removePrefix("$files/").split('/').size <= 2) { "搜索路径超出目标应用范围" } }
-            paths += found.filter(pathPattern::matches).take(13)
+            paths += found.filter(SaveLayout.editablePath::matches).take(13)
         }
         return paths.distinct()
     }
@@ -241,7 +338,7 @@ open class ShellSaveAccess(private val executor: RootCommandExecutor, backend: A
     final override fun backupPaths(packageName: String, user: Int): List<String> {
         val root = "${SaveLayout.root(packageName, user)}/files"
         if (!exists(root)) return emptyList()
-        val paths = run("find ${quote(root)} -maxdepth 2 -type f -name '*.data'", "列举备份源文件", packageName, user)
+        val paths = run("find ${quote(root)} -maxdepth 2 -type f \\( -name '*.data' -o -name '*.data.new' -o -name '*.data_temp' -o -name '*.data.new_temp' \\)", "列举备份源文件", packageName, user)
             .lineSequence().map(String::trim).filter(String::isNotEmpty).distinct().sorted().toList()
         require(paths.size < 128) { "本地文件过多，暂不创建备份" }
         paths.forEach { require(it.startsWith("$root/") && !it.contains("..") && backupPattern.matches(it)) { "备份路径超出目标应用范围" } }

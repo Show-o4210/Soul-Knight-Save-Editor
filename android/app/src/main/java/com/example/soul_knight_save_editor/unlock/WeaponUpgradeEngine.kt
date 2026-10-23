@@ -66,7 +66,7 @@ object WeaponEvolutionEngine {
             }
         }
         val root = JsonObject(inventory.root + ("weapons" to JsonObject(weapons)))
-        val result = if (root == inventory.root) bytes else ItemCodec.encode(root)
+        val result = if (root == inventory.root) bytes else ItemCodec.encode(root, bytes)
         val checked = inspect(result, itemBytes).states.associateBy { it.definition.id }
         targets.forEach { (id, target) -> require(checked.getValue(id).level == maxOf(states.getValue(id).level!!, target)) {
             "武器进化编码复验失败"
@@ -147,7 +147,7 @@ object MythicEngine {
             }
         }
         val root = if (changes.isEmpty()) inventory.root else JsonObject(inventory.root + ("mythicWeapons" to JsonArray(records)))
-        val result = if (root == inventory.root) itemBytes else ItemCodec.encode(root)
+        val result = if (root == inventory.root) itemBytes else ItemCodec.encode(root, itemBytes)
         val checked = inspect(result).states.associateBy { it.definition.id }
         targets.forEach { (id, target) -> require(checked.getValue(id).level == maxOf(states.getValue(id).level!!, target)) {
             "神话武器编码复验失败"

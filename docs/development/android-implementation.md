@@ -2,13 +2,13 @@
 
 [开发文档索引](README.md) · [用户帮助](../help/README.md)
 
-当前源码为正式发布的 **`2.0.4-rc01` / versionCode 25**，标签 `v2.0.4-rc01`，增加游戏列表、8.7 适配、宠物映射修复、三把遗漏武器和武器皮肤功能。维护者于 2026-10-22 反馈模拟器测试通过，适配元气骑士 8.7.0，保留 8.6.0 支持；沿用已测 APK，保留 rc01 版本名并设为正式 Release：[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.4-rc01/SoulKnightSaveEditor-2.0.4-rc01.apk) · [发布说明](../releases/2.0.4-rc01.md)。原生 Root 继续默认。
+当前源码为正式发布的 **`2.0.5-rc02` / versionCode 27**，标签 `v2.0.5-rc02`。新增武器进化、神话武器、XML 自由编辑与重新锁定，修复游戏运行时访问、光速 Root 和 B 站新格式存档。2026-10-23 模拟器测试通过，适配元气骑士 8.7.0，保留 8.6.0 支持；沿用已测 APK 与正式签名：[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc02/SoulKnightSaveEditor-2.0.5-rc02.apk) · [发布说明](../releases/2.0.5-rc02.md)。原生 Root 继续默认。
 
 开发阶段 `2.0.3-dev01` / versionCode 19（已纳入 2.0.3），增加 ZIP 导入／限定范围还原、备份重命名、递增编号与保留上限。版本号递增也使 Shizuku UserService 加载更新后的文件范围规则。还原新建独立事务，原件及其 SHA-256 不改；自动故障恢复继续按原事务检查，详情见[备份说明](../help/backup-and-update.md)。
 
 后续开发阶段 `2.0.3-dev02` / versionCode 20（已纳入 2.0.3），增加第三个自由编辑入口。`FreeEditEngine` 只负责内容编解码、来源匹配与写回计划；`FreeEditStore` 保留私有原件和不可由外部文件改变的对应关系；`FreeEditDocuments` 使用用户授权的本地 SAF 目录，目录／逐文件打开始终包装为应用选择器。自由扫描独立于角色与物品业务识别，支持已知 JSON 编码和明确标识的原始字节导入。大整数排版不经过会转换为浮点数的 JSON 序列化路径。完整流程与范围见[自由编辑说明](../help/free-editing.md)。
 
-这是需要 Root 的本地存档助手。当前候选已核对元气骑士 8.6.0／8.7.0。2026-10-22 在 Android 9 虚拟机验证原生 Root 读取 8.7 及修改预览，未实际写回游戏。文件读写双通道最近完整设备检查为 2026-10-09：Pixel 6 / Android 16 上通过应用自身合成目录验证文件读写、原件备份、事务恢复及 owner、mode、SELinux context。OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，详细范围见[开发状态](../development-status.md)和 [Root / Shizuku 验证记录](../root-shizuku-validation.md)。
+这是需要 Root 的本地存档助手。当前版本已核对元气骑士 8.6.0／8.7.0。2026-10-23 在 Android 9 虚拟机验证 B 站 8.7 原生 Root 材料写回与游戏内效果，并在光速 Android 7.1.2 验证两通道读取。历史文件读写双通道专项检查为 2026-10-09：Pixel 6 / Android 16 上通过应用自身合成目录验证文件读写、原件备份、事务恢复及 owner、mode、SELinux context。OnePlus / APatch / FolkPatch 的 Issue #4 反馈仍待用户复测，详细范围见[开发状态](../development-status.md)和 [Root / Shizuku 验证记录](../root-shizuku-validation.md)。
 
 设置 → 存档访问方式可选择「原生 Root（默认）」或「Shizuku Root（备选）」。Shizuku 需要另行安装并通过 Root 启动；选择后通过按钮授权、检查服务 UID 和 UserService 身份，再读取目标存档。ADB 模式会明确拒绝私有存档访问，不能作为免 Root 方案。一个操作和事务固定使用一个后端，操作中或有未完成事务时禁止切换；切换后旧快照、草稿和预览失效，需重新读取。失败诊断仅在本地展示和复制，不上传存档或日志。
 

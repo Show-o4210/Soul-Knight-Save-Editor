@@ -3,13 +3,14 @@ package com.example.soul_knight_save_editor.unlock
 import kotlinx.serialization.json.*
 
 enum class FreeCodec(val label: String, val extension: String) {
-    GAME_JSON("XOR JSON", "json"), ITEM_JSON("物品 DES JSON", "json"), STATISTIC_JSON("统计 DES JSON", "json"),
+    GAME_JSON("XOR JSON", "json"), ITEM_JSON("物品 JSON · 保留原编码", "json"), STATISTIC_JSON("统计 JSON · 保留原编码", "json"),
     PLAIN_JSON("明文 JSON", "json"), RAW("未识别编码 · 原始字节", "bin"),
     PREFS_XML("XML 配置 · 保留原文", "xml")
 }
 data class FreeSource(val path: String, val codec: FreeCodec)
 data class FreeEditEntry(val path: String, val name: String, val codec: FreeCodec, val plainHash: String, val account: String?)
-data class FreeEditSession(val id: String, val directory: String, val snapshot: SaveSnapshot, val entries: List<FreeEditEntry>)
+data class FreeEditSession(val id: String, val directory: String, val snapshot: SaveSnapshot, val entries: List<FreeEditEntry>,
+    val keepReadingModes: Boolean = false)
 data class FreeDocument(val id: String, val name: String, val bytes: ByteArray) {
     val hash: String by lazy { UnlockEngine.sha(bytes) }
 }
@@ -33,10 +34,12 @@ data class FreeImportReview(val matches: List<FreeMatch>, val ignored: List<Stri
 object FreeEditEngine {
     private val readingFlag = Regex("^(?:OpenRijTest|OpenNewtonJsonTest)(?:_(${SaveAccountId.TOKEN_PATTERN}))?$")
     fun isXml(path: String) = path.contains("/shared_prefs/") && path.endsWith(".xml")
-    fun exportable(file: SaveFile) = file.path.endsWith(".data") || isXml(file.path)
+    fun exportable(file: SaveFile) = file.path.endsWith(".data") || file.path.endsWith(".data.new") || isXml(file.path)
     private fun xmlAccounts(bytes: ByteArray): List<String> {
         val nodes = UnlockEngine.prefs(bytes)
-        return (UnlockEngine.accounts(bytes) + nodes.keys.mapNotNull { readingFlag.matchEntire(it)?.groupValues?.get(1) }).distinct()
+        val mapped = ReadingFlagScope.mappedAccounts(nodes)
+        val extra = mapped ?: nodes.keys.mapNotNull { readingFlag.matchEntire(it)?.groupValues?.get(1) }
+        return (UnlockEngine.accounts(bytes) + extra).distinct()
     }
     fun accounts(snapshot: SaveSnapshot): List<String> = (snapshot.files.flatMap { file ->
         if (!file.path.contains("/shared_prefs/")) listOfNotNull(shardAccount(file.path)) else {
@@ -44,6 +47,11 @@ object FreeEditEngine {
         }
     }).distinct().sorted()
     private fun shardAccount(path: String) = EditEngine.itemAccount(path) ?: EditEngine.statisticAccount(path) ?: EditEngine.weaponSkinAccount(path)
+    private fun pairedPath(path: String): String? = when {
+        path.endsWith(".data.new") -> path.removeSuffix(".new")
+        path.endsWith(".data") -> "$path.new"
+        else -> null
+    }
     private fun root(bytes: ByteArray) = Json.parseToJsonElement(UnlockEngine.utf8(bytes).removePrefix("\uFEFF")).jsonObject
     fun decode(bytes: ByteArray, codec: FreeCodec): JsonObject = when (codec) {
         FreeCodec.GAME_JSON -> root(UnlockEngine.xor(bytes))
@@ -96,12 +104,14 @@ object FreeEditEngine {
         }
     }
     fun create(snapshot: SaveSnapshot, selected: Set<String>, account: String?, directory: String): Pair<FreeEditSession, List<FreeDocument>> {
-        require(selected.isNotEmpty()) { "请先选择要导出的 .data 或 XML 文件" }
+        require(selected.isNotEmpty()) { "请先选择要导出的 .data、.data.new 或 XML 文件" }
         require(selected.all { path -> snapshot.files.any { it.path == path && exportable(it) } }) { "导出目标不在当前读取结果中" }
         BackupArchive.validate(BackupPayload(snapshot.packageName, snapshot.user, snapshot.files))
         val accounts = accounts(snapshot)
         require(account == null || account in accounts) { "读取开关账号不在当前存档中" }
-        val files = snapshot.files.filter { it.path in selected || it.path.contains("/shared_prefs/") }
+        // Keep an existing native counterpart privately even when only one format is exported.
+        val baselinePaths = selected + selected.mapNotNull(::pairedPath)
+        val files = snapshot.files.filter { it.path in baselinePaths || it.path.contains("/shared_prefs/") }
         val baseline = SaveSnapshot(snapshot.packageName, snapshot.user, files.firstOrNull { it.path.contains("/shared_prefs/") }, null,
             files.filter { it.path != files.firstOrNull { item -> item.path.contains("/shared_prefs/") }?.path })
         val entries = mutableListOf<FreeEditEntry>()
@@ -115,7 +125,10 @@ object FreeEditEngine {
             entries += FreeEditEntry(file.path, name, codec, UnlockEngine.sha(bytes), boundAccount)
             FreeDocument(name, name, bytes)
         }
-        return FreeEditSession(java.util.UUID.randomUUID().toString(), directory, baseline, entries) to documents
+        // Derive this before filtering the baseline: an XML-only export still belongs to
+        // the captured game's new-format loading mode and must not switch it to stale DES.
+        val keepReadingModes = snapshot.files.any { it.path.endsWith(".data.new") }
+        return FreeEditSession(java.util.UUID.randomUUID().toString(), directory, baseline, entries, keepReadingModes) to documents
     }
 
     private fun prefixMatches(name: String, prefix: String): Boolean {
@@ -171,6 +184,7 @@ object FreeEditEngine {
         val outputs = linkedMapOf<String, ByteArray>()
         val changes = mutableListOf<String>()
         val affected = mutableSetOf<String>()
+        val jsonEdits = linkedMapOf<String, JsonObject>()
         review.matches.forEach { match ->
             val document = match.chosen?.document ?: return@forEach
             if (document.hash == match.entry.plainHash) return@forEach
@@ -181,10 +195,11 @@ object FreeEditEngine {
                 document.bytes
             } else {
                 val edited = root(document.bytes)
+                if (codec in setOf(FreeCodec.ITEM_JSON, FreeCodec.STATISTIC_JSON, FreeCodec.PLAIN_JSON)) jsonEdits[original.path] = edited
                 if (edited == decode(original.bytes, codec)) original.bytes else when (codec) {
                     FreeCodec.GAME_JSON -> UnlockEngine.xor(edited.toString().toByteArray(Charsets.UTF_8))
-                    FreeCodec.ITEM_JSON -> ItemCodec.encode(edited)
-                    FreeCodec.STATISTIC_JSON -> StatisticCodec.encode(edited)
+                    FreeCodec.ITEM_JSON -> ItemCodec.encode(edited, original.bytes)
+                    FreeCodec.STATISTIC_JSON -> StatisticCodec.encode(edited, original.bytes)
                     FreeCodec.PLAIN_JSON -> document.bytes
                     FreeCodec.RAW -> error("unreachable")
                     FreeCodec.PREFS_XML -> error("unreachable")
@@ -201,8 +216,10 @@ object FreeEditEngine {
                 changes += "${document.name} → ${original.path.substringAfterLast('/')}（${match.chosen!!.matchedBy}匹配，${bytes.size} 字节）"
             }
         }
+        syncPairs(session, jsonEdits, outputs, changes, affected)
         val flags = mutableListOf<String>()
-        if (outputs.isNotEmpty()) session.snapshot.files.filter { it.path.contains("/shared_prefs/") }.forEach { prefs ->
+        if (outputs.isNotEmpty() && session.keepReadingModes) flags += "来源包含新格式分片：保留读取模式及导入 XML 中显式修改的开关值"
+        if (outputs.isNotEmpty() && !session.keepReadingModes) session.snapshot.files.filter { it.path.contains("/shared_prefs/") }.forEach { prefs ->
             // User-edited XML is the base. Applying reading flags to the old original
             // would otherwise silently discard every imported XML change.
             var bytes = outputs[prefs.path] ?: prefs.bytes
@@ -217,5 +234,75 @@ object FreeEditEngine {
             if (!bytes.contentEquals(prefs.bytes)) outputs[prefs.path] = bytes else outputs.remove(prefs.path)
         }
         return SavePlan(outputs, changes + flags, mapOf("自由编辑文件" to changes, "读取来源" to flags).filterValues { it.isNotEmpty() })
+    }
+
+    private data class Delta(val path: List<String>, val value: JsonElement?)
+    private fun deltas(before: JsonObject, after: JsonObject, prefix: List<String> = emptyList()): List<Delta> =
+        (before.keys + after.keys).flatMap { key ->
+            val old = before[key]
+            val next = after[key]
+            when {
+                old == next -> emptyList()
+                old is JsonObject && next is JsonObject -> deltas(old, next, prefix + key)
+                else -> listOf(Delta(prefix + key, next)) // Arrays are an explicit whole-value edit.
+            }
+        }
+
+    private fun applyDelta(root: JsonObject, delta: Delta, depth: Int = 0): JsonObject {
+        val field = delta.path[depth]
+        val values = root.toMutableMap()
+        if (depth == delta.path.lastIndex) {
+            if (delta.value == null) values.remove(field) else values[field] = delta.value
+        } else {
+            val child = values[field]
+            if (child == null && delta.value == null) return root
+            require(child == null || child is JsonObject) { "对应的新旧分片字段结构不同，无法同步本次自由编辑；请核对两份文件" }
+            values[field] = applyDelta(child as? JsonObject ?: JsonObject(emptyMap()), delta, depth + 1)
+        }
+        return JsonObject(values)
+    }
+
+    private fun encoded(root: JsonObject, original: SaveFile, codec: FreeCodec): ByteArray = when (codec) {
+        FreeCodec.ITEM_JSON -> ItemCodec.encode(root, original.bytes)
+        FreeCodec.STATISTIC_JSON -> StatisticCodec.encode(root, original.bytes)
+        FreeCodec.PLAIN_JSON -> root.toString().toByteArray(Charsets.UTF_8)
+        else -> error("此编码不支持分片同步")
+    }
+
+    /** Apply only exported JSON changes to each captured format; unrelated fields retain their own baseline. */
+    private fun syncPairs(session: FreeEditSession, edits: Map<String, JsonObject>, outputs: MutableMap<String, ByteArray>,
+        changes: MutableList<String>, affected: MutableSet<String>) {
+        val handled = mutableSetOf<String>()
+        edits.keys.forEach { path ->
+            if (!handled.add(path)) return@forEach
+            val paired = pairedPath(path) ?: return@forEach
+            val other = session.snapshot.files.singleOrNull { it.path == paired } ?: return@forEach
+            handled += paired
+            val source = session.snapshot.files.single { it.path == path }
+            val pair = listOf(source, other)
+            val codecs = pair.associate { it.path to detect(it) }
+            if (codecs.values.any { it !in setOf(FreeCodec.ITEM_JSON, FreeCodec.STATISTIC_JSON, FreeCodec.PLAIN_JSON) }) {
+                changes += "${other.path.substringAfterLast('/')}：对应编码未识别，已保留原样；请自行核对新旧分片"
+                return@forEach
+            }
+            val original = pair.associate { it.path to decode(it.bytes, codecs.getValue(it.path)) }
+            val updates = pair.mapNotNull { file -> edits[file.path]?.let { deltas(original.getValue(file.path), it) } }
+            if (updates.size == 2) updates[0].forEach { first -> updates[1].forEach { second ->
+                val overlap = first.path == second.path || first.path.take(second.path.size) == second.path || second.path.take(first.path.size) == first.path
+                require(!overlap || first == second) { "同一新旧分片的自由编辑内容冲突，请让两份文件的同一字段保持一致，或只导入一份修改" }
+            } }
+            val combined = updates.flatten().distinct()
+            pair.forEach { file ->
+                val before = original.getValue(file.path)
+                val after = combined.fold(before) { state, delta -> applyDelta(state, delta) }
+                if (after == before) outputs.remove(file.path) else {
+                    val bytes = encoded(after, file, codecs.getValue(file.path))
+                    require(bytes.size in 1..UnlockEngine.MAX_BYTES && decode(bytes, codecs.getValue(file.path)) == after) { "新旧分片同步编码校验失败" }
+                    outputs[file.path] = bytes
+                    shardAccount(file.path)?.let(affected::add)
+                    if (file.path !in edits) changes += "同步已有分片 ${file.path.substringAfterLast('/')}：仅同步本次自由编辑字段，保留其余内容和原编码"
+                }
+            }
+        }
     }
 }

@@ -3,16 +3,19 @@ package com.example.soul_knight_save_editor.unlock
 /** Register supported sources once; discovery, scanning and account binding share these names. */
 enum class SaveSource(val directory: String, val depth: Int, val glob: String, val filename: Regex) {
     GAME("files", 2, "game.data", Regex("^game\\.data$")),
-    ITEM("files", 2, "item_data*.data", Regex("^item_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data$")),
-    STATISTIC("files", 2, "statistic*.data", Regex("^statistic(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data$")),
+    ITEM("files", 2, "item_data*.data*", Regex("^item_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
+    STATISTIC("files", 2, "statistic*.data*", Regex("^statistic(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$")),
     PREFS("shared_prefs", 1, "*.xml", Regex("^[a-zA-Z0-9_.-]+\\.xml$")),
-    WEAPON_SKINS("files", 2, "weapon_evolution_data*.data", Regex("^weapon_evolution_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data$"))
+    WEAPON_SKINS("files", 2, "weapon_evolution_data*.data*", Regex("^weapon_evolution_data(?:_(${SaveAccountId.TOKEN_PATTERN})_)?\\.data(?:\\.new)?$"))
 }
 
 object SaveLayout {
     // Backups also contain opaque .data shards. Only restore writes these; the editor still
     // selects sources through editablePath and the fixed source filename patterns below.
-    val restorablePath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+\\.data|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
+    // Native recovery candidates are retained verbatim by backup/restore, never editor sources.
+    const val DATA_SUFFIX = "\\.data(?:\\.new)?(?:_temp)?"
+    val backupDataPath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+$DATA_SUFFIX$")
+    val restorablePath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/(?:files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+$DATA_SUFFIX|shared_prefs/[a-zA-Z0-9_.-]+\\.xml)$")
     val packagePattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z0-9_]+)+$")
     private val dataNames = SaveSource.entries.filter { it.directory == "files" }
         .joinToString("|") { it.filename.pattern.removePrefix("^").removeSuffix("$") }
@@ -67,6 +70,17 @@ object SaveScanner {
         target.weaponSkins.forEach { validate(it, SaveSource.WEAPON_SKINS) }
         access.stop(target.packageName, target.user)
         require(access.exists(root)) { "当前游戏版本已不存在，请重新查找" }
+        // A game launch may migrate a legacy shard to .new after this bookmark was created.
+        // Recheck bounded names for the selected account before trusting its saved locations.
+        listOf(SaveSource.ITEM to target.items, SaveSource.STATISTIC to target.statistics,
+            SaveSource.WEAPON_SKINS to target.weaponSkins).forEach { (source, pinned) ->
+            val listed = access.list(root, source)
+            require(listed.size <= 128 && listed.distinct().size == listed.size) { "当前候选文件过多或重复，请重新查找" }
+            val found = listed.filter { source.filename.matches(it.substringAfterLast('/')) }.onEach { validate(it, source) }
+                .filter { SaveLayout.account(it, source) == target.account }.toSet()
+            val expected = pinned.filter { SaveLayout.account(it, source) == target.account }.toSet()
+            require(found == expected) { "所选账号的存档位置或新旧格式已变化，请重新查找后再编辑" }
+        }
         val snapshot = SaveSnapshot(target.packageName, target.user, target.prefs?.let(access::read), target.game?.let(access::read),
             target.items.map(access::read), target.statistics.map(access::read), target.weaponSkins.map(access::read))
         SaveReadConsistency.verify(target.packageName, target.user, snapshot.files, access::stop, access::read)

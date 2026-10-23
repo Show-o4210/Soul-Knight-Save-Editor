@@ -20,12 +20,30 @@ enum class AssistantPage { WORKSPACE, BACKUPS, SETTINGS }
 data class ModeChoices(val quickRoles: Boolean = false, val quickSkins: Boolean = false,
     val quickLevels: Boolean = false, val quickSkills: Boolean = false, val quickPets: Boolean = false,
     val quickWeapons: Boolean = false,
-    val expert: UnlockSelection = UnlockSelection()) {
+    val expert: UnlockSelection = UnlockSelection(), val quickRelock: Boolean = false) {
     fun weapons(mode: AssistantMode) = mode == AssistantMode.QUICK && quickWeapons
-    fun selection(mode: AssistantMode, catalog: Catalog): UnlockSelection = when (mode) {
+    fun relocking(mode: AssistantMode) = when (mode) {
+        AssistantMode.QUICK -> quickRelock
+        AssistantMode.EXPERT -> expert.relock
+        AssistantMode.FREE -> false
+    }
+    fun withRelock(mode: AssistantMode, value: Boolean): ModeChoices {
+        if (relocking(mode) == value) return this
+        return when (mode) {
+            AssistantMode.QUICK -> copy(quickRoles = false, quickSkins = false, quickLevels = false,
+                quickSkills = false, quickPets = false, quickRelock = value)
+            AssistantMode.EXPERT -> copy(expert = UnlockSelection(relock = value))
+            AssistantMode.FREE -> this
+        }
+    }
+    fun selection(mode: AssistantMode, catalog: Catalog, relockInventory: RelockInventory? = null): UnlockSelection = when (mode) {
         AssistantMode.FREE -> UnlockSelection()
         AssistantMode.EXPERT -> expert
-        AssistantMode.QUICK -> UnlockSelection(
+        AssistantMode.QUICK -> if (quickRelock) UnlockSelection(
+            heroes = if (quickRoles) relockInventory?.heroes.orEmpty() else emptySet(),
+            skins = if (quickSkins) relockInventory?.skins.orEmpty() else emptySet(),
+            skillIds = if (quickSkills) relockInventory?.skills.orEmpty() else emptySet(), relock = true)
+        else UnlockSelection(
             if (quickRoles) catalog.heroes.filter { it.unlocked != null }.map { it.index }.toSet() else emptySet(),
             if (quickSkins) catalog.heroes.flatMap { hero -> hero.skins.keys.map { SkinId(hero.index, it) } }.toSet() else emptySet(),
             quickLevels, quickSkills, quickPets)
@@ -62,6 +80,8 @@ data class AssistantState(
     val pinnedTarget: PinnedSaveTarget? = null,
     val accounts: List<String> = emptyList(),
     val catalog: Catalog? = null,
+    val relockInventory: RelockInventory? = null,
+    val relockMessage: String = "请先读取存档",
     val petStates: List<PetState> = emptyList(),
     val petMessage: String = "请先扫描宠物存档",
     val choices: ModeChoices = ModeChoices(),
@@ -138,7 +158,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     } ?: AccessBackend.NATIVE_ROOT)
     private var repository = SaveRepository(journalDirectory, device)
     private fun createAccess(backend: AccessBackend): SaveAccess = when (backend) {
-        AccessBackend.NATIVE_ROOT -> GuardedNativeSaveAccess(RootStorage(), NativeWriteGuard(
+        AccessBackend.NATIVE_ROOT -> GuardedNativeSaveAccess(RootStorage(helperApk = getApplication<Application>().applicationInfo.sourceDir), NativeWriteGuard(
             { android.provider.Settings.Global.getInt(getApplication<Application>().contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1) },
             { settings.getInt("nativeWriteBoot", -1) },
             { boot ->
@@ -157,6 +177,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     private val archiveDirectory = File(application.filesDir, "export-backups-v1")
     private val backupCatalog = BackupCatalog(File(application.filesDir, "backup-labels-v1.jsonl"))
     private val freeStore = FreeEditStore(File(application.filesDir, "free-edit-sessions-v1"))
+    private var relockContext: Pair<RelockScope, List<RelockOriginal>>? = null
     private val searchCancelled = AtomicBoolean(false)
     var state by mutableStateOf(AssistantState(
         accessBackend = device.backend,
@@ -426,7 +447,23 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val evolution = report.weaponEvolution
         val mythic = report.mythic
         val catalog = characters.getOrNull() ?: Catalog(state.accounts, account, emptyList(), true)
+        relockContext = null
+        val relock = withContext(Dispatchers.IO) {
+            runCatching {
+                val scope = relockScope(snapshot)
+                val sources = RelockSources.load(snapshot, account, repository, state.archives)
+                val inventory = RelockEngine.inspect(snapshot.game?.bytes, requireNotNull(snapshot.prefs) { "没有角色 XML" }.bytes,
+                    account, scope, sources.originals)
+                Triple(scope to sources.originals, inventory, sources)
+            }
+        }
+        relock.getOrNull()?.let { relockContext = it.first }
         state = state.copy(pinnedTarget = PinnedSaveTarget.from(snapshot, account), progression = report.progression.getOrNull().orEmpty(), weaponStates = report.weapons.getOrNull().orEmpty(), expertItems = if (clearDrafts) ItemChoices() else state.expertItems, expertWeapons = if (clearDrafts) WeaponChoices() else state.expertWeapons, catalog = catalog, petStates = pets.getOrNull().orEmpty(),
+            relockInventory = relock.getOrNull()?.second,
+            relockMessage = relock.fold({ (_, _, sources) ->
+                (if (sources.sourceCount > 0) "已核对 ${sources.sourceCount} 份备份原件，优先恢复解锁前原值。" else "没有可用的解锁前原件；已核对当前游戏的适用参考，锁值未知的跳过。") +
+                    (if (sources.skippedBackups > 0) " ${sources.skippedBackups} 份备份未通过核验，已跳过。" else "")
+            }, { "重新锁定暂不可用：${it.message ?: "参考读取失败"}" }),
             petMessage = if (pets.isFailure) pets.exceptionOrNull()?.message ?: "宠物读取失败"
                 else if (pets.getOrThrow().isEmpty()) "这个存档暂时没有可修改的宠物。" else "可修改 ${pets.getOrThrow().size} 只宠物。",
             choices = if (clearDrafts) ModeChoices() else state.choices, itemRoot = items.getOrNull(), itemChoices = if (clearDrafts) ItemChoices() else state.itemChoices,
@@ -450,8 +487,21 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             message = if (characters.isFailure) "角色暂不可用：${characters.exceptionOrNull()?.message}"
                 else "存档已就绪，可以开始编辑。")
     }
+    private fun relockScope(snapshot: SaveSnapshot): RelockScope {
+        val info = runCatching { getApplication<Application>().packageManager.getPackageInfo(snapshot.packageName, 0) }.getOrNull()
+        @Suppress("DEPRECATION")
+        val code = info?.let { if (android.os.Build.VERSION.SDK_INT >= 28) it.longVersionCode.let { n ->
+            if (n in 0..Int.MAX_VALUE.toLong()) n.toInt() else -1
+        } else it.versionCode }
+        return RelockScope(snapshot.packageName, snapshot.user, info?.versionName, code)
+    }
     fun account(account: String) = work { loadAccount(account) }
     fun select(selection: UnlockSelection) { if (!state.busy && state.mode == AssistantMode.EXPERT) state = state.copy(choices = state.choices.copy(expert = selection), preview = null, previewMode = null) }
+    fun characterRelock(value: Boolean) {
+        val mode = state.mode ?: return
+        if (!state.busy && mode != AssistantMode.FREE)
+            state = state.copy(choices = state.choices.withRelock(mode, value), preview = null, previewMode = null)
+    }
     fun quick(roles: Boolean = state.choices.quickRoles, skins: Boolean = state.choices.quickSkins,
         levels: Boolean = state.choices.quickLevels, skills: Boolean = state.choices.quickSkills,
         pets: Boolean = state.choices.quickPets) {
@@ -536,11 +586,15 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val snapshot = requireNotNull(state.snapshot)
         val catalog = requireNotNull(state.catalog)
         val mode = requireNotNull(state.mode)
-        val selection = state.choices.selection(mode, catalog)
+        val selection = state.choices.selection(mode, catalog, state.relockInventory)
         val items = state.itemsFor(mode).selection()
         val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode), state.weaponSkinsFor(mode),
-            state.weaponEvolutionFor(mode), state.mythicFor(mode)) }
-        if (patch.outputs.isEmpty()) state = state.copy(message = "所选内容没有变化，无需写入。")
+            state.weaponEvolutionFor(mode), state.mythicFor(mode),
+            relockScope = relockContext?.first, relockOriginals = relockContext?.second.orEmpty()) }
+        if (patch.outputs.isEmpty()) state = state.copy(message = if (selection.relock) {
+            "没有可写回的重新锁定变化。" + patch.changes.take(5).joinToString("；") +
+                (if (patch.changes.isEmpty()) "请查看重新锁定页面中的保留与跳过说明。" else "")
+        } else "所选内容没有变化，无需写入。")
         else state = state.copy(preview = patch, previewMode = mode)
     }
     fun dismiss() { if (!state.busy) state = state.copy(preview = null, previewMode = null) }

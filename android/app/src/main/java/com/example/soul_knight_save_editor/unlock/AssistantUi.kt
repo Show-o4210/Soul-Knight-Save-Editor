@@ -78,7 +78,7 @@ private val guideColors = darkColorScheme(primary = Color(0xFFE1D0FB), onPrimary
 private val names = mapOf("Knight" to "骑士", "Ranger" to "游侠", "Mage" to "法师", "Assassin" to "刺客",
     "Alchemist" to "炼金术士", "Engineer" to "工程师", "Vampire" to "吸血鬼", "Paladin" to "圣骑士",
     "Priest" to "牧师", "Robot" to "机器人", "LadyChef" to "厨娘")
-private fun Hero.label() = "${names[name] ?: name} · c$index"
+internal fun Hero.label() = "${names[name] ?: name} · c$index"
 private fun accountLabel(value: String) = if (value.isEmpty()) "本地账号" else "账号 …${value.takeLast(4)}"
 private fun timestamp(value: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(value))
 
@@ -232,6 +232,12 @@ private val workspaceSections = listOf(
 
 @Composable private fun CharactersPage(model: AssistantModel, renderMode: AssistantMode, modifier: Modifier) {
     val state = model.state
+    if (state.choices.relocking(renderMode)) {
+        RelockCharacterContent(state, renderMode, modifier, model::characterRelock,
+            { roles, skins, skills -> model.quick(roles = roles, skins = skins, skills = skills) }, model::select,
+            model::preview, { model.tab(WorkspaceTabs.saves) }, { model.page(AssistantPage.BACKUPS) }, model::requestConsent)
+        return
+    }
     val catalog = state.catalog
     val quick = renderMode == AssistantMode.QUICK
     var query by rememberSaveable { mutableStateOf("") }
@@ -240,6 +246,7 @@ private val workspaceSections = listOf(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
             item { Panel(title = "角色", help = HelpTopics.roles) {
                 catalog?.let { Text(accountLabel(it.account), style = MaterialTheme.typography.labelSmall) }
+                CharacterActionSelector(false, !state.busy, model::characterRelock)
                 if (catalog == null) {
                     Text("请先读取存档。")
                     OutlinedButton({ model.tab(WorkspaceTabs.saves) }, enabled = !state.busy) { Text("前往存档") }
@@ -303,7 +310,7 @@ private val workspaceSections = listOf(
 @Composable internal fun PendingEdits(state: AssistantState, renderMode: AssistantMode, onPreview: () -> Unit) {
     val catalog = state.catalog ?: return
     val quick = renderMode == AssistantMode.QUICK
-    val characters = EditEngine.hasCharacters(state.choices.selection(renderMode, catalog))
+    val characters = EditEngine.hasCharacters(state.choices.selection(renderMode, catalog, state.relockInventory))
     val items = state.itemsFor(renderMode).hasChanges
     val weapons = (if (quick) state.choices.quickWeapons else state.expertWeapons.hasChanges) || state.weaponSkinsFor(renderMode).hasChanges ||
         state.weaponEvolutionFor(renderMode).hasChanges || state.mythicFor(renderMode).hasChanges
@@ -360,7 +367,7 @@ private val workspaceSections = listOf(
             Text("备份与恢复", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("把原件留在自己手里", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("当前版本：${state.packageName}", style = MaterialTheme.typography.labelSmall)
-            Text("当前存档备份包含本地 .data 分片与识别到的 XML，不含 .data.new 或其他账号配置。备份含个人存档，请勿公开分享。", style = MaterialTheme.typography.bodySmall)
+            Text("当前存档备份包含本地 .data、.data.new、原生临时恢复分片与识别到的 XML。备份含个人存档，请勿公开分享。", style = MaterialTheme.typography.bodySmall)
         } }
         item { Panel(title = "备份文件夹", help = HelpTopics.backups) {
             Text(state.folder?.let { BackupDestination.label(Uri.parse(it)) } ?: "尚未选择。建议在“文档”中建立专用文件夹。", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -461,7 +468,7 @@ private val workspaceSections = listOf(
         } }
         item { Panel {
             Text("共同的边界", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("各模式共用备份与写回校验。快速模式按类别修改，专家模式逐项选择，自由编辑通过外部应用修改文件；自由编辑不检查业务字段关系。不操作 .data.new。")
+            Text("各模式共用备份与写回校验。快速模式按类别修改，专家模式逐项选择，自由编辑通过外部应用修改文件；自由编辑不检查业务字段关系；新旧格式按各自原编码写回。")
             if (!state.personalUseAccepted) OutlinedButton(model::requestConsent) { Text("确认个人使用约定") }
             Text("本地运行，无联网权限", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } }

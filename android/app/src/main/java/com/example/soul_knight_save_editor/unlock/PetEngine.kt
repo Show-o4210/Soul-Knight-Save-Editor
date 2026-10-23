@@ -50,7 +50,8 @@ object PetEngine {
         }
         return states
     }
-    fun unlock(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String, selected: Set<String>? = null): UnlockPatch {
+    fun unlock(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String, selected: Set<String>? = null,
+        preserveReadingFlags: Boolean = false): UnlockPatch {
         val states = inspect(gameBytes, prefsBytes, account)
         require(states.isNotEmpty()) { "没有找到映射表中的宠物 XML 键" }
         require(selected == null || selected.all { id -> states.any { it.definition.id == id } }) { "不能创建未知或缺失的宠物键" }
@@ -66,7 +67,8 @@ object PetEngine {
             pets?.set(pet.id, JsonPrimitive(true))
             changes += "宠物 ${pet.label} [${pet.id}]：解锁"
         }
-        val (prefs, flags) = UnlockEngine.localReadingFlags(text.toByteArray(Charsets.UTF_8), account)
+        val changedPrefs = text.toByteArray(Charsets.UTF_8)
+        val (prefs, flags) = if (preserveReadingFlags) changedPrefs to emptyList() else UnlockEngine.localReadingFlags(changedPrefs, account)
         changes += flags
         val updated = if (pets != null) JsonObject(root!! + ("petUnlock" to JsonObject(pets))) else root
         val game = if (updated == null || updated == root) gameBytes else UnlockEngine.xor(updated.toString().toByteArray(Charsets.UTF_8))

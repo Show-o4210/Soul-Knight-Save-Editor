@@ -18,7 +18,7 @@ class EditEngineTest {
         val save = snapshot(item).copy(statistics = listOf(stat, other, statistic("statistic.data")))
         assertEquals(listOf("42", "99"), EditEngine.accounts(save))
         assertEquals(stat, EditEngine.statistic(save, "42"))
-        assertNull(EditEngine.statisticAccount("statistic_42_.data.new"))
+        assertEquals("42", EditEngine.statisticAccount("statistic_42_.data.new"))
         assertNull(EditEngine.statisticAccount("statistic_42_xdata"))
         val plan = EditEngine.preview(save, "42", UnlockSelection(), ItemSelection(), true)
         assertEquals(setOf(stat.path), plan.outputs.keys)
@@ -55,7 +55,7 @@ class EditEngineTest {
         assertEquals(listOf("42"), EditEngine.accounts(state))
         assertEquals(named, EditEngine.item(state, "42"))
         assertThrows(IllegalArgumentException::class.java) { EditEngine.item(state, "99") }
-        assertNull(EditEngine.itemAccount("item_data_42_.data.new"))
+        assertEquals("42", EditEngine.itemAccount("item_data_42_.data.new"))
         assertNull(EditEngine.itemAccount("item_data_42_xdata"))
         assertNull(EditEngine.itemAccount("setting_42_.data"))
     }

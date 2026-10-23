@@ -13,7 +13,7 @@ data class WeaponSkinState(val weapon: String, val label: String, val skins: Lis
 data class WeaponSkinInventory(val version: Int, val root: JsonObject, val states: List<WeaponSkinState>, val unknownWeapons: Int)
 data class WeaponSkinPatch(val bytes: ByteArray, val root: JsonObject, val changes: List<String>)
 
-/** DES-iambo shard only. Unlocking never changes evolution level or the current skin. */
+/** DES-iambo or native Rijndael shard. Unlocking never changes evolution level or the current skin. */
 object WeaponSkinEngine {
     private fun number(record: JsonObject, field: String): Int {
         val value = (record[field] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
@@ -98,7 +98,7 @@ object WeaponSkinEngine {
             if (changed) weapons[id] = JsonObject(record)
         }
         val root = JsonObject(inventory.root + ("weapons" to JsonObject(weapons)))
-        val result = if (root == inventory.root) bytes else ItemCodec.encode(root)
+        val result = if (root == inventory.root) bytes else ItemCodec.encode(root, bytes)
         val checked = inspect(result, itemBytes)
         targets.forEach { id ->
             val state = checked.states.single { it.weapon == id }

@@ -17,7 +17,8 @@ data class Hero(val index: Int, val name: String, val unlocked: Boolean?, val sk
 data class Catalog(val accounts: List<String>, val account: String, val heroes: List<Hero>, val xmlOnly: Boolean)
 data class UnlockSelection(val heroes: Set<Int> = emptySet(), val skins: Set<SkinId> = emptySet(),
     val levels: Boolean = false, val skills: Boolean = false, val pets: Boolean = false,
-    val levelHeroes: Set<Int> = emptySet(), val skillIds: Set<SkillId> = emptySet(), val petIds: Set<String> = emptySet()) {
+    val levelHeroes: Set<Int> = emptySet(), val skillIds: Set<SkillId> = emptySet(), val petIds: Set<String> = emptySet(),
+    val relock: Boolean = false) {
     val hasProgress get() = levels || skills || levelHeroes.isNotEmpty() || skillIds.isNotEmpty()
 }
 data class UnlockPatch(val game: ByteArray?, val prefs: ByteArray, val changes: List<String>)
@@ -178,7 +179,9 @@ object UnlockEngine {
         }
     }
 
-    fun unlock(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String, selection: UnlockSelection): UnlockPatch {
+    fun unlock(gameBytes: ByteArray?, prefsBytes: ByteArray, account: String, selection: UnlockSelection,
+        preserveReadingFlags: Boolean = false): UnlockPatch {
+        require(!selection.relock) { "重新锁定请使用带原值核对的 RelockEngine" }
         val catalog = catalog(gameBytes, prefsBytes, account)
         require(selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.hasProgress) { "请先选择要修改的内容" }
         require(gameBytes != null || !selection.hasProgress) { "等级和技能需要 game.data 与 XML 双文件核对，当前为 XML 单文件模式" }
@@ -264,7 +267,8 @@ object UnlockEngine {
                 gameSkills[hero.name] = JsonArray(patched)
             }
         }
-        val (encodedPrefs, flags) = localReadingFlags(text.toByteArray(Charsets.UTF_8), account)
+        val changedPrefs = text.toByteArray(Charsets.UTF_8)
+        val (encodedPrefs, flags) = if (preserveReadingFlags) changedPrefs to emptyList() else localReadingFlags(changedPrefs, account)
         changes += flags
         prefs(encodedPrefs)
         val encodedGame = root?.let {
@@ -298,15 +302,27 @@ object UnlockEngine {
 
     fun localReadingFlags(bytes: ByteArray, account: String): Pair<ByteArray, List<String>> {
         val nodes = prefs(bytes)
+        val binding = ReadingFlagScope.bind(nodes, account)
+        val scope = binding.scope ?: return bytes to
+            listOfNotNull(binding.note.takeIf { ReadingFlagScope.rawScopes(nodes).isNotEmpty() })
+        return localReadingFlagScopes(bytes, setOf(scope))
+    }
+
+    /** Explicit original scopes are used only when restoring the complete backed-up XML. */
+    internal fun localReadingFlagScopes(bytes: ByteArray, scopes: Set<String>): Pair<ByteArray, List<String>> {
+        val nodes = prefs(bytes)
+        require(scopes.all { it.isEmpty() || Regex("^${SaveAccountId.TOKEN_PATTERN}$").matches(it) }) { "读取开关范围格式未知" }
         var text = utf8(bytes)
         val changes = mutableListOf<String>()
-        for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
-            val name = if (account.isEmpty()) flag else "${flag}_$account"
-            val node = nodes[name] ?: continue
-            require(node.tagName == "int" && value(node) in setOf("0", "1")) { "读取开关格式未知，暂不写入" }
-            if (value(node) == "1") {
-                text = replaceXml(text, node, "0")
-                changes += "$flag：切换为本地读取（0）"
+        for (scope in scopes) {
+            for (flag in listOf("OpenRijTest", "OpenNewtonJsonTest")) {
+                val name = if (scope.isEmpty()) flag else "${flag}_$scope"
+                val node = nodes[name] ?: continue
+                require(node.tagName == "int" && value(node) in setOf("0", "1")) { "读取开关格式未知，暂不写入" }
+                if (value(node) == "1") {
+                    text = replaceXml(text, node, "0")
+                    changes += "$flag：切换为本地读取（0）"
+                }
             }
         }
         return text.toByteArray(Charsets.UTF_8) to changes

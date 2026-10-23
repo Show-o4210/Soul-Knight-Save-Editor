@@ -14,13 +14,13 @@ data class BackupInfo(val file: File, val packageName: String, val kind: String,
 /** Bounded local archive format. Restore destinations always come from validated relative paths. */
 object BackupArchive {
     const val MAX_TOTAL_BYTES = 64 * 1024 * 1024
-    private val relativePath = Regex("^(files/(?:[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.-]+\\.data|shared_prefs/[A-Za-z0-9_.-]+\\.xml)$")
+    private val relativePath = Regex("^(files/(?:[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.-]+${SaveLayout.DATA_SUFFIX}|shared_prefs/[A-Za-z0-9_.-]+\\.xml)$")
     private fun relative(payload: BackupPayload, file: SaveFile): String {
         val prefixes = listOf("/data/user/${payload.user}/${payload.packageName}/") +
             if (payload.user == 0) listOf("/data/data/${payload.packageName}/") else emptyList()
         val prefix = prefixes.firstOrNull { file.path.startsWith(it) } ?: error("备份文件不属于所选应用")
         val path = file.path.removePrefix(prefix)
-        require(relativePath.matches(path) && ".." !in path && !path.endsWith(".new")) { "备份包含范围外文件" }
+        require(relativePath.matches(path) && ".." !in path) { "备份包含范围外文件" }
         return path
     }
 
@@ -46,7 +46,7 @@ object BackupArchive {
         val manifest = buildJsonObject {
             put("schema", 1); put("kind", payload.kind); put("package", payload.packageName)
             put("user", payload.user); put("createdAt", now)
-            put("scope", if (payload.kind == "local-save") "local .data files and identified PlayerPrefs; excludes .data.new" else "originals of files changed by this assistant")
+            put("scope", if (payload.kind == "local-save") "local .data/.data.new files, native _temp recovery candidates and identified PlayerPrefs" else "originals of files changed by this assistant")
             put("files", JsonArray(payload.files.mapIndexed { index, source -> buildJsonObject {
                 put("path", paths[index]); put("bytes", source.bytes.size); put("sha256", UnlockEngine.sha(source.bytes))
                 put("owner", source.owner); put("mode", source.mode); put("context", source.context)

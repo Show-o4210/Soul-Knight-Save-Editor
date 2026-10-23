@@ -81,6 +81,7 @@ android {
         it.systemProperty("vivo.baseline", providers.gradleProperty("vivoBaseline").orNull ?: "")
         it.systemProperty("save87.baseline", providers.gradleProperty("save87Baseline").orNull ?: "")
         it.systemProperty("weaponSkin.reference", providers.gradleProperty("weaponSkinReference").orNull ?: "")
+        it.systemProperty("relock.baseline", providers.gradleProperty("relockBaseline").orNull ?: "")
     }
 }
 

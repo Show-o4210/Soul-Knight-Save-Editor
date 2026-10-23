@@ -63,6 +63,20 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         BackupRecord("transaction:${it.name}", data.getValue("package").jsonPrimitive.content,
             it.name.substringBefore('-').toLong(), data.getValue("entries").jsonArray.size, "pre-change")
     }
+    internal fun relockHistory(packageName: String): Pair<List<BackupRecord>, Int> {
+        val valid = mutableListOf<BackupRecord>()
+        var invalid = 0
+        records().forEach { record ->
+            try {
+                if (stateOf(record) !in setOf("complete", "rolled_back", "restored")) return@forEach
+                val data = manifest(record)
+                if (data.getValue("package").jsonPrimitive.content != packageName) return@forEach
+                valid += BackupRecord("transaction:${record.name}", packageName,
+                    record.name.substringBefore('-').toLong(), data.getValue("entries").jsonArray.size, "pre-change")
+            } catch (_: Exception) { invalid++ }
+        }
+        return valid to invalid
+    }
     @Synchronized fun delete(id: String) {
         val record = folder(id)
         require(stateOf(record) in setOf("complete", "rolled_back", "restored")) { "不能清理未完成事务" }
@@ -74,6 +88,23 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         val metadata = manifest(folder)
         val files = metadata.getValue("entries").jsonArray.mapIndexed { index, entry -> entryFile(folder, index, entry.jsonObject, "before") }
         return BackupPayload(metadata.getValue("package").jsonPrimitive.content, metadata.getValue("user").jsonPrimitive.int, files, "pre-change")
+    }
+    /** Read only the hashed PlayerPrefs original, without loading unrelated large shard backups. */
+    @Synchronized fun relockPrefs(id: String, snapshot: SaveSnapshot): BackupPayload? {
+        val target = snapshot.prefs ?: return null
+        val record = folder(id)
+        require(stateOf(record) in setOf("complete", "rolled_back", "restored")) { "未完成事务不能作为重新锁定原值" }
+        val metadata = manifest(record)
+        if (metadata.getValue("package").jsonPrimitive.content != snapshot.packageName ||
+            metadata.getValue("user").jsonPrimitive.int != snapshot.user) return null
+        fun alias(path: String) = if (snapshot.user == 0) path.replaceFirst("/data/user/0/", "/data/data/") else path
+        val matches = metadata.getValue("entries").jsonArray.withIndex().filter {
+            alias(it.value.jsonObject.getValue("path").jsonPrimitive.content) == alias(target.path)
+        }
+        require(matches.size <= 1) { "备份中的角色 XML 不唯一" }
+        val found = matches.singleOrNull() ?: return null
+        val file = entryFile(record, found.index, found.value.jsonObject, "before")
+        return BackupPayload(snapshot.packageName, snapshot.user, listOf(file), "pre-change").also(BackupArchive::validate)
     }
     private fun folder(id: String): File {
         require(Regex("^[0-9]+-[a-f0-9-]+$").matches(id))
@@ -230,14 +261,11 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
             var bytes = source.bytes
             if (source.path.contains("/shared_prefs/")) {
                 val nodes = UnlockEngine.prefs(bytes)
-                val flag = Regex("^(?:OpenRijTest|OpenNewtonJsonTest)(?:_(${SaveAccountId.TOKEN_PATTERN}))?$")
                 // The whole backed-up XML is restored. A fallback XML, however, is current data:
-                // only change flags for the accounts explicitly identified by restored shards.
-                val accounts = if (source.path == fallback) shardAccounts else
-                    nodes.keys.mapNotNull { flag.matchEntire(it)?.groupValues?.get(1) }.distinct()
-                accounts.forEach {
-                    bytes = UnlockEngine.localReadingFlags(bytes, it).first
-                }
+                // bind restored file accounts to their explicit Chilly UID before touching it.
+                bytes = if (source.path == fallback) {
+                    shardAccounts.fold(bytes) { currentXml, account -> UnlockEngine.localReadingFlags(currentXml, account).first }
+                } else UnlockEngine.localReadingFlagScopes(bytes, ReadingFlagScope.rawScopes(nodes)).first
             }
             source.path to bytes
         }

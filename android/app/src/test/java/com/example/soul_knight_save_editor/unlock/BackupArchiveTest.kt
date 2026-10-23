@@ -38,9 +38,21 @@ class BackupArchiveTest {
         val source = file("shared_prefs/player.xml").copy(path = "/data/data/com.test.game/shared_prefs/player.xml")
         assertEquals(1, BackupArchive.create(temp.newFolder(), payload(source)).count)
     }
-    @Test fun cloudFilesAndUnrelatedPathsAreRefused() {
-        listOf("files/game.data.new", "files/session.json", "files/../secret.data", "files/a/b/game.data").forEach { path ->
+    @Test fun unrelatedSuffixesAndPathsAreRefused() {
+        listOf("files/game.data.new.bak", "files/game.data_temp.new", "files/game.data.new_temp_temp", "files/session.json", "files/../secret.data", "files/a/b/game.data").forEach { path ->
             assertThrows(IllegalArgumentException::class.java) { BackupArchive.create(temp.newFolder(), payload(file(path))) }
+        }
+    }
+    @Test fun oldNewAndNativeRecoveryCandidatesRoundTripWithoutChangingTheirBytes() {
+        val files = listOf("files/item_data_42_.data", "files/item_data_42_.data.new", "files/item_data_42_.data_temp", "files/item_data_42_.data.new_temp")
+            .mapIndexed { index, path -> file(path, byteArrayOf(index.toByte(), -1, 7)) }
+        val info = BackupArchive.create(temp.newFolder(), BackupPayload("com.test.game", 0, files))
+        val restored = BackupArchive.read(info.file)
+        assertEquals(files.map { it.path }, restored.files.map { it.path })
+        files.zip(restored.files).forEach { (before, after) ->
+            assertArrayEquals(before.bytes, after.bytes)
+            assertEquals(before.owner, after.owner)
+            assertEquals(before.mode, after.mode)
         }
     }
     @Test fun foreignAccountSandboxIsRefused() {

@@ -30,8 +30,151 @@ class RootStorageTest {
         val (directory, executor) = access(RootCommandResult(0, "directory\n", 3))
         assertTrue(directory.exists(root))
         assertEquals(1, executor.calls.count { it.command == "id" })
+        assertEquals(1, executor.calls.count { it.command.startsWith("LC_ALL=C stat -L ") })
+        assertFalse(executor.calls.any { it.command.startsWith("LC_ALL=C stat -c ") })
         assertFalse(access(RootCommandResult(0, "regular file\n", 1)).first.exists(root))
         assertEquals("uid=0 gid=0", directory.latestDiagnostic!!.identity)
+    }
+    // Android 7 toybox prints usage before the unsupported-option error, not after it.
+    private val legacyStatHelp = """
+        usage: stat [-f] [-c FORMAT] FILE...
+
+        Display status of files or filesystems.
+
+        -f display filesystem status instead of file status
+        -c Output specified FORMAT string instead of default
+
+        The valid format escape sequences for files:
+        %a  Access bits (octal) |%A  Access bits (flags)|
+        %f  All mode bits (hex) |%F  File type         |
+
+        The valid format escape sequences for filesystems:
+        %a  Available blocks   |%b  Total blocks      |
+        stat: Unknown option L
+    """.trimIndent()
+    private fun legacyAccess(probe: RootCommandResult, backend: AccessBackend = AccessBackend.NATIVE_ROOT): Pair<ShellSaveAccess, Executor> {
+        val executor = Executor { request -> when {
+            request.command.startsWith("LC_ALL=C stat -L ") -> RootCommandResult(1, legacyStatHelp, 2)
+            request.command.startsWith("readlink") -> RootCommandResult(0, root, 1)
+            else -> probe
+        } }
+        return ShellSaveAccess(executor, backend) to executor
+    }
+    @Test fun oldStatAutomaticallyContinuesWithCompatibleProbeForBothBackends() {
+        for (backend in AccessBackend.entries) {
+            val (storage, executor) = legacyAccess(RootCommandResult(0, "directory\n", 1), backend)
+            assertTrue(storage.exists(root))
+            assertEquals(listOf("id", "LC_ALL=C stat -L -c '%F' '$root'", "LC_ALL=C stat -c '%F' '$root'", "readlink -f '$root'"),
+                executor.calls.map { it.command })
+            assertTrue(storage.latestDiagnostic!!.stage.contains("旧版 stat 不支持 -L"))
+            assertFalse(storage.latestDiagnostic!!.render().contains(root))
+            assertTrue(executor.calls.none { it.writing })
+        }
+    }
+    @Test fun compatibleProbeOnlyReturnsFalseForKnownMissingOperandOrNonDirectory() {
+        for (output in listOf(RootCommandResult(1, "stat: '$root': No such file or directory\n", 1),
+            RootCommandResult(1, "stat: $root: Not a directory\n", 1), RootCommandResult(0, "regular file\n", 1))) {
+            val (storage, executor) = legacyAccess(output)
+            assertFalse(storage.exists(root))
+            assertFalse(executor.calls.any { it.command.startsWith("readlink") })
+            assertTrue(storage.latestDiagnostic!!.stage.contains("旧版 stat 不支持 -L"))
+        }
+    }
+    @Test fun compatibleProbeDoesNotHideDeniedIoUnknownOrUnrelatedMissingErrors() {
+        for ((exit, message, kind) in listOf(
+            Triple(1, "stat: '$root': Permission denied", AccessFailureKind.TARGET_ACCESS_DENIED),
+            Triple(1, "stat: '$root': Operation not permitted", AccessFailureKind.TARGET_ACCESS_DENIED),
+            Triple(1, "stat: '$root': Input/output error", AccessFailureKind.COMMAND_FAILED),
+            Triple(1, "stat: unknown failure", AccessFailureKind.COMMAND_FAILED),
+            Triple(1, "stat: /another/path: No such file or directory", AccessFailureKind.COMMAND_FAILED),
+            Triple(2, "stat: '$root': No such file or directory", AccessFailureKind.COMMAND_FAILED))) {
+            val (storage, executor) = legacyAccess(RootCommandResult(exit, message, 1))
+            val error = assertThrows(AccessFailure::class.java) { storage.exists(root) }
+            assertEquals(kind, error.kind)
+            assertTrue(error.diagnostic!!.stage.contains("旧版 stat 不支持 -L"))
+            assertFalse(executor.calls.any { it.command.startsWith("readlink") })
+            assertTrue(executor.calls.none { it.writing })
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            legacyAccess(RootCommandResult(0, "unrecognized file type", 1)).first.exists(root)
+        }
+    }
+    @Test fun primaryProbeDoesNotFallbackForAnythingExceptAnExactUnsupportedLFailure() {
+        for (message in listOf("stat: '$root': Permission denied", "stat: '$root': Input/output error",
+            "stat: unknown failure", "stat: Unknown option c", "stat: not found",
+            "$legacyStatHelp\nstat: '$root': Permission denied", "$legacyStatHelp\nunknown failure")) {
+            val executor = Executor { RootCommandResult(1, message, 1) }
+            assertThrows(AccessFailure::class.java) { RootStorage(executor).exists(root) }
+            assertFalse(executor.calls.any { it.command.startsWith("LC_ALL=C stat -c ") || it.command.startsWith("readlink") })
+        }
+    }
+    @Test fun compatibleProbeResolvesFinalSymlinkAndOnlyAcceptsExistingSamePackageAlias() {
+        val original = "/data/user/0/com.test.game"
+        val alias = "/data/data/com.test.game"
+        for (target in listOf(alias, "/data/user/0/com.other.game", "/data/user/10/com.test.game")) {
+            val executor = Executor { request -> when {
+                request.command.startsWith("LC_ALL=C stat -L ") -> RootCommandResult(1, legacyStatHelp, 1)
+                request.command == "LC_ALL=C stat -c '%F' '$original'" -> RootCommandResult(0, "symbolic link", 1)
+                request.command.startsWith("readlink") -> RootCommandResult(0, target, 1)
+                request.command == "LC_ALL=C stat -c '%F' '$alias'" -> RootCommandResult(0, "directory", 1)
+                else -> error("Unexpected probe command")
+            } }
+            val storage = RootStorage(executor)
+            if (target == alias) assertTrue(storage.exists(original))
+            else {
+                assertThrows(IllegalArgumentException::class.java) { storage.exists(original) }
+                assertEquals(1, executor.calls.count { it.command.startsWith("LC_ALL=C stat -c ") })
+            }
+            assertTrue(executor.calls.none { it.writing })
+        }
+    }
+    @Test fun compatibleProbeCannotTrustAResolvedAliasWithoutCheckingItsTypeAndFailure() {
+        val original = "/data/user/0/com.test.game"
+        val alias = "/data/data/com.test.game"
+        for (resolved in listOf(RootCommandResult(0, "regular file", 1),
+            RootCommandResult(1, "stat: '$alias': No such file or directory", 1),
+            RootCommandResult(1, "stat: '$alias': Permission denied", 1))) {
+            val executor = Executor { request -> when {
+                request.command.startsWith("LC_ALL=C stat -L ") -> RootCommandResult(1, legacyStatHelp, 1)
+                request.command == "LC_ALL=C stat -c '%F' '$original'" -> RootCommandResult(0, "symbolic link", 1)
+                request.command.startsWith("readlink") -> RootCommandResult(0, alias, 1)
+                else -> resolved
+            } }
+            val storage = RootStorage(executor)
+            if (resolved.mergedOutput.contains("Permission denied")) assertEquals(AccessFailureKind.TARGET_ACCESS_DENIED,
+                assertThrows(AccessFailure::class.java) { storage.exists(original) }.kind)
+            else assertFalse(storage.exists(original))
+        }
+    }
+    @Test fun hashCompatibilityNeverStartsAWriteAfterFailedOrIncorrectSelfTest() {
+        val path = "$root/files/game.data"
+        for (selfTest in listOf(RootCommandResult(0, "0".repeat(64), 1),
+            RootCommandResult(1, "app_process: Permission denied", 1))) {
+            val executor = Executor { request -> when {
+                request.command.startsWith("readlink") -> RootCommandResult(0, path, 1)
+                request.command == "sha256sum /dev/null" -> RootCommandResult(127, "sh: <stdin>[17]: sha256sum: not found", 1)
+                request.command.endsWith(" --self-test") -> selfTest
+                else -> error("Unexpected command before a validated SHA-256 implementation")
+            } }
+            val storage = RootStorage(executor, "/data/app/com.test.editor/base.apk")
+            assertThrows(Exception::class.java) { storage.replace(SaveFile(path, byteArrayOf(1), "10010:10010", "600", ""), byteArrayOf(2)) }
+            assertEquals(1, executor.calls.count { it.command.endsWith(" --self-test") })
+            assertTrue(executor.calls.none { it.writing })
+        }
+    }
+    @Test fun hashCompatibilityDoesNotMaskPermissionIoUnknownOrNon127Errors() {
+        val path = "$root/files/game.data"
+        for ((exit, output) in listOf(1 to "sha256sum: '$path': Permission denied",
+            1 to "sha256sum: '$path': Input/output error", 1 to "sha256sum: not found",
+            127 to "sha256sum: unknown failure", 127 to "sh: <stdin>[1]: sha256sum: not found\nunknown failure")) {
+            val executor = Executor { request -> if (request.command.startsWith("readlink")) RootCommandResult(0, path, 1)
+                else RootCommandResult(exit, output, 1) }
+            assertThrows(AccessFailure::class.java) {
+                RootStorage(executor, "/data/app/com.test.editor/base.apk")
+                    .replace(SaveFile(path, byteArrayOf(1), "10010:10010", "600", ""), byteArrayOf(2))
+            }
+            assertTrue(executor.calls.none { it.writing || "app_process" in it.command })
+        }
     }
     @Test fun onlyExactMissingOperandErrnoReturnsFalse() {
         for (message in listOf("stat: '$root': No such file or directory\n", "stat: $root: Not a directory\n",
@@ -99,7 +242,7 @@ class RootStorageTest {
         for (path in listOf("/etc", "$root/../com.other.game", "/data/user/10/com.test.game;echo/files")) {
             assertThrows(IllegalArgumentException::class.java) { storage.exists(path) }
         }
-        assertThrows(IllegalArgumentException::class.java) { storage.read("$root/files/game.data.new") }
+        assertThrows(IllegalArgumentException::class.java) { storage.read("$root/files/game.data.new.bak") }
         assertThrows(IllegalArgumentException::class.java) { storage.backupPaths("com.test.game;echo", 10) }
         assertEquals(count, executor.calls.size)
     }

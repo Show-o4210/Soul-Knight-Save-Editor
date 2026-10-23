@@ -83,22 +83,23 @@ class WeaponSkinIntegrationTest {
         assertArrayEquals(snapshot.weaponSkins.single().bytes, device.read(snapshot.weaponSkins.single().path).bytes)
         assertEquals("0", UnlockEngine.prefs(device.read(snapshot.prefs.path).bytes).getValue("OpenNewtonJsonTest_42").getAttribute("value"))
     }
-    @Test fun scannerAndPinnedRefreshIncludeSkinShardButNeverNewFiles() {
+    @Test fun scannerAndPinnedRefreshIncludeBothExistingSkinFormats() {
         val device = Memory("native-root")
         val source = snapshot(device)
         val skin = source.weaponSkins.single()
         device.files["${skin.path}.new"] = skin.copy(path = "${skin.path}.new")
         val scanned = SaveScanner.scan(device, "com.test.game", 0)
-        assertEquals(listOf(skin.path), scanned.weaponSkins.map { it.path })
-        assertArrayEquals(skin.bytes, scanned.weaponSkins.single().bytes)
-        assertFalse("${skin.path}.new" in device.readPaths)
+        assertEquals(listOf(skin.path, "${skin.path}.new"), scanned.weaponSkins.map { it.path })
+        assertTrue(scanned.weaponSkins.all { it.bytes.contentEquals(skin.bytes) })
+        assertTrue("${skin.path}.new" in device.readPaths)
         val pinned = PinnedSaveTarget.from(scanned, "42")
-        assertEquals(listOf(skin.path), pinned.weaponSkins)
+        assertEquals(listOf(skin.path, "${skin.path}.new"), pinned.weaponSkins)
         assertTrue(SaveLayout.editablePath.matches(skin.path))
-        assertFalse(SaveLayout.editablePath.matches("${skin.path}.new"))
+        assertTrue(SaveLayout.editablePath.matches("${skin.path}.new"))
+        assertFalse(SaveLayout.editablePath.matches("${skin.path}.new_temp"))
         device.readPaths.clear()
         SaveScanner.refresh(device, pinned)
-        assertEquals(source.files.map { it.path }.toSet(), device.readPaths.toSet())
+        assertEquals(scanned.files.map { it.path }.toSet(), device.readPaths.toSet())
         assertThrows(IllegalArgumentException::class.java) {
             SaveScanner.refresh(device, pinned.copy(weaponSkins = listOf("/data/user/0/com.other.game/files/weapon_evolution_data_42_.data")))
         }

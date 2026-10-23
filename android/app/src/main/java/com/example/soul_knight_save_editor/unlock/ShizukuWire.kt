@@ -5,7 +5,7 @@ import kotlinx.serialization.json.*
 /** Only small metadata crosses Binder. Sensitive file bodies and paths never enter diagnostics. */
 internal object ShizukuWire {
     const val MAX_REPLY = 196608
-    private val backupPath = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+/files/(?:[a-zA-Z0-9_.-]+/)?[a-zA-Z0-9_.-]+\\.data$")
+    private val backupPath = SaveLayout.backupDataPath
     private val directory = Regex("^/data/(?:user/[0-9]+|data)/[a-zA-Z][a-zA-Z0-9_.]+(?:/(?:files|shared_prefs))?$")
     fun target(packageName: String, user: Int) {
         require(SaveLayout.packagePattern.matches(packageName) && user in 0..100000) { "包名或 Android 用户编号无效" }
