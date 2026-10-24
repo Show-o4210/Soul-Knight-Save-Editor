@@ -1,0 +1,88 @@
+buffTimesDic里面填天赋代码 数字填到buffs里面    注：不完整
+1 "MasterThough":1 暴击穿敌
+2 "MasterLaser":1 激光加粗
+3 "MasterShotgun":1 散弹增多
+4 "MasterSwordRebound":1 近战反弹
+5 "MasterHold":1 蓄力加快
+6 "ShieldBlue":1 蓝盾
+7 "ShieldSting":1 刺盾
+8 "ShieldGas":1 毒盾
+9 "ShieldFire":1 火盾
+10 "ExpertShop":1 商店5折
+11 "VampireHp":1 杀敌回血
+12 "ExpertPot":1 血瓶恢复加强
+13 "VampireEnergy":1 杀敌回蓝
+14 "ExpertForce":1 紫手套
+15 "ExpertGem":1 增加结算蓝币
+16 "MaxHp":1, 增加血量上限
+17 "ExpertPet":1 加强随从
+18 "ShieldBlast":1 碎盾
+19 "ExpertBoxPot":1箱子掉血瓶
+20 "MasterAccurate":1 子弹精准暴击
+21 "SkillCd":1 减少技能cd
+22 "ExpertStatus":1 雕像触发两次 双持雕像
+23 "ShieldIce":1 冰盾
+24 "MasterReflection":1 子弹反弹
+25 "MasterWeapon":1 三持武器
+新版本26和27合并了所以代码无效
+28 "MaxArmor":1 加盾
+29 "MasterSwordRange":1 增加近战武器攻击距离
+30 "MaxEnergy":1蓝量上限+100
+31 "MasterContinuous":1 连击次数增加
+32 "MasterSpeedAtk":1 攻速增加
+33 "EnemyDeadBoom":1 击败敌人有概率爆炸
+34 "CoinAddArmor":1 金盾
+35 "HurtBeCrazy":1 掉血暴击
+36 "SpeedUpWithCritic":1 疾步生甲
+37 破盾回蓝代码新版无效
+38 "ArmorBrokenRestoreArmor":1 护盾破碎时回一半 60秒cd
+39 "QigongWave":1 手刀时耗蓝释放气功波
+40 "ElementalStaff":1 元素子弹双倍暴击 加强法杖类武器
+41 "HitThunderStormBuff":1 暴击率+5并落雷
+45 "DeepCold":1 冻结时间延长0.5秒
+46 "BreakIce":1 对冻结状态的敌人伤害提升50%
+1001 "WellWater":1 井水效果
+1002 "Tutor":1 导师
+1003-1014属于角色限定天赋
+1015 "IcePick":1 冰锥飞刺
+1016 "IceSculpture":1 冰雕爆破
+1017 "IceFreeze":1 寒霜并环
+1020 "FocusOn":1 每击败1名敌人攻速暴率+5%偏移-2持续10秒
+2101 "WhirlWindSlash":1 旋风斩
+2102 "ExtraEmitBullet":1 远程子弹命中50%概率额外释放一枚子弹
+2103 "HitFullHpEnemyCritical":1 攻击满血敌人必暴击
+2105 "CyclicElementEnhance":1 元素伤害+50% 冰火毒雷中3秒变换一次
+2106 "MoveEnhanceAttack":1 移动积攒动能 下次攻击造成最多3点伤害 攒满动能攻击必暴击并眩晕目标
+2108 "PetCharge":1 随从和宠物进入战斗状态攻速伤害+25% 持续12秒
+2124 "StingRevenge":1 受击后释放一圈尖刺 生命上限越高尖刺伤害越高
+2127 "Siphon":1 防御-1 每6秒吸取周围敌人血量
+2128 "PetMimic":1 宠物会模仿你的攻击
+2131 "BulletSurround":1 子弹环绕
+2132 "Sputter":1 获得10层溅射 每层+5%伤害 击败+2层 受伤-5层
+2133 "SummonPet":1 当前每有100能量随机召唤1只宠物
+2138 "SkillPowStack":1 每次使用技能提升10%伤害
+2140 "LaserRefraction":1 光电类武器有30%概率折射3到激光
+2145 "SkillAddDamage":1 用技能提升10%伤害 总共5层 血量最低触发满层
+2146 "TenCritical":1 10次攻击必暴击
+2170 "HolyNovaOnDying":1 神圣新星
+2171 "SoulStrike":1 灵魂打击
+2172 "FrostNovaOnShieldHit":1 冰霜之环
+2173 "RegularFireBreath":1 烈焰吐息
+2174 "MoveReleaseHurricane":1 疾步生风
+2175 "ChaosStrike":1 元素爆发
+2177 "AirReinforcement":1 墨镜支援
+2178 "FireWork":1 释放技能丢出一些爆竹 接触到敌人会爆炸 
+
+
+
+
+补充：
+44,中毒效果叠三层,MasterPoison
+1019,连续攻击敌人时或敌人死亡时掉落音符，拾取后子弹大小+10%、移动速度+5%，持续3秒，效果可叠加至多3层,IncreaseVolume
+2001,进入下一关时恢复10%的最大血量，最低恢复1点血量,NextLevelRestoreHP
+2002,进入下一关时恢复30%最大能量,NextLevelRestoreEnergy
+2003,击中怪物有概率触发闪电链，有概率眩晕怪物,HitEnemyCreateThunder
+2004,击中怪物的位置向四周释放冰刺，有概率冰冻怪物,HitEnemyCreateIce
+2107,攻击命中时额外消耗?％最大能量，对目标造成?％能量消耗的额外电元素伤害,MaxEnergyLoop
+2117,每8秒抵挡一次元素效果,PeriodicImmuneElement
+2118,给敌人附加负面状态时，有25％概率回复1点护盾,RecoverArmorOnInflictDebuff

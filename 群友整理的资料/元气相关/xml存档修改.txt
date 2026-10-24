@@ -1,0 +1,138 @@
+更改角色解锁数据
+直接搜索对应角色的代码 角色代码如下括号里面是角色的英文名 
+c0    骑士(Knight)
+c1    游侠(Ranger)
+c2    法师(Mage)
+c3    刺客(Assassin)
+c4    炼金术士(Alchemist)
+c5    工程师(Engineer)
+c6    吸血鬼(Vampire)
+c7    圣骑士(Paladin)
+c8    精灵(Elves)
+c9    狼人(Werewolf)
+c10    牧师(Priest)
+c11    德鲁伊(Druid)
+c12    机器人(Robot)
+c13    狂战士(Viking)
+c14    死灵法师(Necromancer)
+c15    警官(Officer)
+c16    道士(Taoist)
+c17    超界者(Transcendent)
+c18    古代元素使(Envoy)
+c19    枭首者(Beheaded)
+c20    超时空忍者(Ninja)
+c21    特种骑士部队(SpecialForces)
+c22    气宗(Airbender)
+c23    恶魔术士(Warlock)
+c24    矿工(Miner)
+c25    陷阱大师(TrapMaster)
+c26    皮套王子(CostumePrince)
+c27    博士(Doctor)
+c28    剑宗(SwordMaster)
+c29    枪客(Lancer)
+c30    领主(Warliege)
+c31    咒法骑士(ArcaneKnight)
+c32    占星师(Astrologist)
+c33    武斗家(Fighter）
+c34    戏法师(Joker)
+c35    吟游诗人(Bard）
+c36    枪手(Shooter）
+c37    机械姬(AiGirl)
+c38    船长(Captain)
+c39    阴阳师(YinYang)
+c40    枪械专家(GunsExpert)
+c41    厨娘(LadyChef)
+新出的角色代码以此类推 搜索到之后可以看到后面有True或者False True是已解锁 False是未解锁 改就行了
+    角色技能解锁状态修改
+基于上面角色括号里面的英文搜索 比如 c_Knight_skill_0_unlock这样搜 Knight就是骑士的英文名 skill后面的0就是对应的技能 0是1技能 1是2技能 2是3技能 搜到之后可以看到value后面的数字 改成1就是解锁
+    角色等级修改
+搜索角色代码+level
+比如c22_level 就是气宗的等级数据
+搜到之后可以看到value后面的数字 这个就是等级了 改成7就是满级
+    蓝币数据更改
+可以直接搜本地存档的蓝币数量 看到前面有gems这4个字母就是蓝币数据 直接改就行了
+    宠物数据更改
+搜索对应宠物代码 宠物代码如下
+p0    阿凉
+p1    旺财
+p2    火腿
+p3    蓝色史莱姆
+p4    萝卜卜
+p5    熊猫
+p6    蹦蹦
+p7    罐头猪
+p8    嗒普(tap专属)
+p9    豆娃(4399专属)
+p10    鸽子
+p11    扑扑
+p12    海豹宝宝
+p13    祖传漏洞
+p14    来福
+p15    粉红小河马
+p16    小天狗
+p17    黑猪(废案)
+p18    阿巴
+p19    黑麦
+p20    冷喵
+p21    雪诺
+p22    趴趴
+p23    牛仔
+p24    阿凉长官
+p25    布拉尼
+p26    小兲
+p27    夜歌
+p28    太郎
+p29    布丁
+p30    泡泡
+p31    波奇
+p32    栗子
+p33    炎焱
+p34    胡椒
+p35    迷迭猫
+p36    九折
+p37    冲鸭
+p38    萨卡萨卡
+p39    招财
+p40    小锤锤
+p41    小粽子
+p42    胡椒导演
+p43    进击的漏洞
+p44    财满满
+p45    火力喵
+p46    小史莱姆
+p47    粽大哥
+p48    土嚎
+p49    小豚豚
+p50    珍珠防御塔
+p51    小小教官
+p52    火力雪人王
+p53    凉块
+p54    来财
+新出的宠物代码以此类推 搜索到之后可以看到后面有True或者False True是已解锁 False是未解锁 改就行了
+    皮肤数据更改
+搜索c数字+_skin数字 前面的数字是对应角色 后面的数字是对应皮肤 0就是原皮 列如c12_skin0 就是角色机器人的原皮 搜到之后可以看到value后面的数字 甭管数字是多少 改成1就是已解锁
+    存档ID修改 可以看到<string name=后面有一大串的数字 而且有很多行 数字都是一样的 这个就是存档ID 渠道服是一大串数字和字母组合的ID tap 好游快爆 国际版就是纯数字 改这个一般是把存档移植到别的账号上 然后还得搜索以下字段并删除整行
+cloudSaveId
+SdkStateCache
+MallJumpTrackingData
+last_account_id
+LastConfigBranch
+LOCALlast_pid
+last_chilly_uid
+local_announcement_list
+UsedAccounts
+FrequentCheckCache_LoginTag
+local_announcement_list
+OpenNewtonJsonTest
+LOCALfire_next_gene_time2
+LOCALfire_gene_current2
+movedLocalDataIds
+lastSocialPromoteId
+LOCALhas_season_data
+LOCALhas_item_data
+RedDotTree_SocialPromote
+LOCALhas_statistic
+OpenRijTest
+download_save_count
+open_today
+例如需要把这个渠道服的存档移植到tap版本的账号上 就搜索这串ID 然后全部替换成tap版本的ID 再搜索上述字段删除整行后 把文件复制过去

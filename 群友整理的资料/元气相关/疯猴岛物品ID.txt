@@ -1,0 +1,182 @@
+护甲👕
+粗布衣esc_item_armor_sackcloth_bag
+旧毛衣esc_item_armor_old_clothes
+紧身衣esc_item_armor_tight_suit
+皮马甲esc_item_armor_leather_armor
+冲锋衣esc_item_armor_jacket
+重型铠甲esc_item_armor_heavy_armor
+防弹衣esc_item_armor_bulletproof_vest
+传说中的铠甲esc_item_armor_legendary_armor
+
+
+背包🎒
+塑料袋esc_item_bag_plastic_bag
+布挎包esc_item_bag_cloth_satchel
+旧书包esc_item_bag_old_schoolbag
+登山包esc_item_bag_mountaineering
+战术背包esc_item_bag_tactical_backpack
+传说中的背包esc_item_bag_legendary_backpack
+
+
+护符💎（这个不清楚，太多天赋但只有这一个代码，不建议改这个）
+天赋护符esc_workshop_talisman
+
+
+食物🥯🍟🍔（此模块最大堆叠数都为5）
+辣条esc_item_food_spicy_strip
+盐水鱼干esc_item_food_salted_dried_fish
+可乐esc_item_food_cola
+薯片esc_item_food_potato_chips
+罐装豆子esc_item_food_canned_beans
+发硬面包esc_item_food_stale_bread
+紫菜薄饼esc_item_food_seaweed_cracker
+能量果冻esc_item_food_energy_jelly
+炭烤岩菇esc_item_food_charcoal_mushroom
+压缩饼干esc_item_food_compressed_biscuit
+烟熏火腿esc_item_food_smoked_ham
+汐贝蒸饭esc_item_food_tide_shell_rice
+岩蜜烤肋排esc_item_food_rock_honey_rib
+
+
+药水💊💊（数字为最大可堆叠数）
+小血瓶 - 5 esc_item_hp_pot_0
+小能量瓶 - 5 esc_item_energy_pot_0
+中血瓶 - 5 esc_item_hp_pot_1
+中能量瓶 - 5 esc_item_energy_pot_1
+大血瓶 - 5 esc_item_hp_pot_2
+大能量瓶 - 5 esc_item_energy_pot_2
+负重药剂 - 3 esc_item_potion_load_boost
+速度药剂 - 3 esc_item_potion_speed
+特大血瓶 - 5 esc_item_hp_pot_3
+特大能量瓶 - 5 esc_item_energy_pot_3
+抗火药剂 - 3 esc_item_potion_fire_resist
+抗毒药剂 - 3 esc_item_potion_poison_resist
+抗冰药剂 - 3 esc_item_potion_ice_resist
+全恢复药剂 - 3 esc_item_potion_full_recovery
+
+
+变卖之类的🏧🏧（不可堆叠）
+铜块esc_item_misc_copper_chunk
+小木箱esc_item_misc_small_wooden_crate
+铜条esc_item_misc_copper_bar
+中木箱esc_item_misc_medium_wooden_crate
+银块esc_item_misc_silver_chunk
+铜砖esc_item_misc_copper_brick
+银条esc_item_misc_silver_bar
+纯金硬币esc_item_misc_gold_coin
+大木箱esc_item_misc_large_wooden_crate
+月白珍珠esc_item_misc_moon_pearl
+逆时针怀表esc_item_treasure_counterclockwise_watch
+金块esc_item_misc_gold_chunk
+银砖esc_item_misc_silver_brick
+先知的手杖esc_item_treasure_prophet_staff
+金条esc_item_misc_gold_bar
+灰暗的天赋印记esc_item_talent_mark_dim
+逃生名单esc_item_treasure_escape_list
+潮汐星图esc_item_treasure_tide_star_chart
+风暴污染采样瓶esc_item_treasure_storm_sample_bottle
+预言石板esc_item_treasure_prophecy_slab
+潮汐演算装置esc_item_treasure_tide_calculator
+金砖esc_item_misc_gold_brick
+纯金裂纹面具esc_item_treasure_cracked_gold_mask
+陨石碎片esc_item_treasure_meteorite_fragment
+
+
+
+杂物＋材料（数字为最大可堆叠数）
+面粉 - 5 esc_item_food_flour
+粗粮 - 5 esc_item_food_coarse_grain
+木炭条 - 5 esc_item_misc_charcoal_stick
+粗麻绳卷 - 5 esc_item_misc_hemp_rope_roll
+破旧木料 - 5 esc_item_material_wood_1
+破烂布料 - 5 esc_item_material_cloth_1
+边角石料 - 5 esc_item_material_stone_1
+锈蚀金属 - 5 esc_item_material_metal_1
+旧齿轮 - 5 esc_item_misc_old_gear
+骨制针 - 5 esc_item_misc_bone_needle
+紫菜 - 5 esc_item_food_seaweed
+蜂蜜 - 5 esc_item_food_honey
+蘑菇 - 5 esc_item_food_mushroom
+紫色能量痕迹 - 15 esc_item_misc_purple_energy_trace
+陶瓶 - 5 esc_item_misc_clay_bottle
+铁绣钉 - 5 esc_item_misc_rusty_nails
+轻薄木料 - 5 esc_item_material_wood_2
+完整布料 - 5 esc_item_material_cloth_2
+矿盐 - 5 esc_item_misc_mineral_salt
+大块石料 - 5 esc_item_material_stone_2
+燧石盒 - 5 esc_item_misc_flint_box
+杂质金属 - 5 esc_item_material_metal_2
+贝壳 - 5 esc_item_misc_shell
+花蛤 - 5 esc_item_food_clam
+生肉 - 5 esc_item_food_raw_meat
+紫色能量碎片 - 10 esc_item_misc_purple_energy_shard
+厚实木料 - 5 esc_item_material_wood_3
+精致布料 - 5 esc_item_material_cloth_3
+整块石料 - 5 esc_item_material_stone_3
+精炼金属 - 5 esc_item_material_metal_3
+精致布料 - 5 esc_item_material_cloth_3
+强韧布料 - 5 esc_item_material_cloth_4
+规整石料 - 5 esc_item_material_stone_4
+复合金属 - 5 esc_item_material_metal_4
+紫色能量结晶 - 5 esc_item_misc_purple_energy_crystal
+珍稀木料 - 5 esc_item_material_wood_5
+科技布料 - 5 esc_item_material_cloth_5
+精切石料 - 5 esc_item_material_stone_5
+强化金属 - 5 esc_item_material_metal_5
+
+
+藏宝图⚠️
+藏宝图 esc_item_treasure_map
+秘传藏宝图 esc_item_treasure_map_rare
+
+
+
+
+武器💣（esc_item_weapon_武器ID，一般是这除了磨损武器，一些武器制造台没有，可以通过这种方法添加）
+阿卡47
+大菠萝
+霰弹枪一代
+弩
+弓
+砍刀
+强力分裂者
+霰弹枪二代
+火箭筒
+强化突击步枪
+霰弹枪三代
+双截棍
+光剑蓝
+光剑红
+光剑绿
+冰川
+樱花霰弹枪
+风魔手里剑
+扑克牌
+陌刀
+柳叶刀
+手榴弹
+突击步枪-战术精英版
+光剑紫
+养剑葫
+电弧手里剑
+蝰蛇
+爆炸战锤
+英雄弓
+魔法弓
+死神之息
+聚爆
+大菠萝（永不磨损）
+强力分裂者（永不磨损）
+强化突击步枪（永不磨损）
+霰弹枪三代（永不磨损）
+双节棍（永不磨损）
+冰川（永不磨损）
+陌刀（永不磨损）
+柳叶刀（永不磨损）
+手榴弹（永不磨损）
+突击步枪‑战术精英版（永不磨损）
+电弧手里剑（永不磨损）
+蝰蛇（永不磨损）
+爆炸战锤（永不磨损）
+魔法弓（永不磨损）
+死神之息（永不磨损）

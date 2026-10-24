@@ -1,0 +1,474 @@
+鱼干累积获得数量(改它能解锁充值奖励)"cumulativeFishCount":120234,
+
+花圃和摩托车解锁
+itemUnlock里面填入代码 填完像下面这样就可以了
+  "itemUnlock":[
+    "plant_pot3",
+    "plant_pot4",
+    "plant_pot5",
+    "Motorcycle",
+    "plant_pot7",
+    "plant_pot6"
+  ],
+
+神话武器修改 搜索mythicWeapons 直接复制粘贴改成下面这样 新增武器ID以此类推
+  "mythicWeapons":[
+    {
+      "id":0,
+      "level":3
+    },
+    {
+      "id":1,
+      "level":3
+    },
+    {
+      "id":2,
+      "level":3
+    },
+    {
+      "id":3,
+      "level":3
+    },
+    {
+      "id":4,
+      "level":3
+    },
+    {
+      "id":5,
+      "level":3
+    },
+    {
+      "id":6,
+      "level":3
+    },
+    {
+      "id":7,
+      "level":3
+    },
+    {
+      "id":8,
+      "level":3
+    },
+    {
+      "id":9,
+      "level":3
+    },
+    {
+      "id":10,
+      "level":3
+    },
+    {
+      "id":11,
+      "level":3
+    },
+    {
+      "id":12,
+      "level":3
+    },
+    {
+      "id":13,
+      "level":3
+    },
+    {
+      "id":14,
+      "level":3
+    },
+    {
+      "id":16,
+      "level":3
+    },
+    {
+      "id":15,
+      "level":3
+    },
+    {
+      "id":17,
+      "level":3
+    },
+    {
+      "id":18,
+      "level":3
+    },
+    {
+      "id":19,
+      "level":3
+    },
+    {
+      "id":20,
+      "level":3
+    },
+    {
+      "id":21,
+      "level":3
+    },
+    {
+      "id":22,
+      "level":3
+    },
+    {
+      "id":23,
+      "level":3
+    },
+    {
+      "id":24,
+      "level":3
+    },
+    {
+      "id":25,
+      "level":3
+    },
+    {
+      "id":26,
+      "level":3
+    },
+    {
+      "id":27,
+      "level":3
+    }
+  ],    
+
+
+
+"blueprints"蓝图 Got是已获得 Researched是已研发(缺哪个加上就行了) 
+新版后面的Researched和Got改为数字 Got是1 Researched是2 直接改数字就行
+示例
+维C机甲 "blueprint_m_mech_3":"2"
+水帘洞府 "hall_skin_1":"1"
+像这样改就行
+
+机甲类
+天启 "blueprint_m_mech_2":"Researched"
+维C机甲 "blueprint_m_mech_3":"Researched"
+信号增幅器 "blueprint_m_mech_4":"Researched"
+舞狮机甲 "blueprint_m_mech_5":"Researched"
+飞梭战机 "blueprint_m_mech_6":"Researched"
+幽浮51 "blueprint_m_mech_7":"Researched"
+狱火战车 "blueprint_m_mech_8":"Researched"
+独角仙 "blueprint_m_mech_9":"Researched"
+财迷 "blueprint_m_mech_coin":"Researched"
+吉光片羽 "blueprint_m_mecha_normal_2s":"Researched"
+爆裂装甲 "blueprint_m_mecha_normal_b":"Researched"
+突击装甲 "blueprint_m_mecha_normal_d":"Researched"
+游击装甲 "blueprint_m_mecha_normal_e":"Researched"
+
+家具类
+饮料机 "blueprint_room_decorate_drink_seller":"Researched"
+鱼缸 "blueprint_room_decorate_fishbowl":"Researched"
+魔术井 "blueprint_room_decorate_magic_well":"Researched"
+雕像 "blueprint_room_decorate_mysteriou_statue":"Researched"
+
+英雄角色类
+细胞粘液 "blueprint_transform_weapon_beheaded":"Researched"
+回响琥珀 "blueprint_transform_weapon_beheaded":"Researched"
+超时空忍者召唤器 "blueprint_transform_weapon_ninja":"Researched"
+特别支援呼叫器 "blueprint_transform_weapon_specialforces":"Researched"
+纬度指引手册 "blueprint_transform_weapon_transcendent":"Researched"
+
+角色皮肤对应的blueprint_skin可以直接改xml文件解锁 所以不必管它
+
+武器类(翻武器代码大全就能看到对应的武器)
+"blueprint_weapon_184":"Researched"
+"blueprint_weapon_188":"Researched"
+"blueprint_weapon_189":"Researched"
+"blueprint_weapon_195":"Researched"
+"blueprint_weapon_211":"Researched"
+"blueprint_weapon_212":"Researched"
+"blueprint_weapon_213":"Researched"
+"blueprint_weapon_217":"Researched"
+"blueprint_weapon_223":"Researched"
+"blueprint_weapon_224":"Researched"
+"blueprint_weapon_237":"Researched"
+"blueprint_weapon_238":"Researched"
+"blueprint_weapon_240":"Researched"
+"blueprint_weapon_242":"Researched"
+"blueprint_weapon_252":"Researched"
+"blueprint_weapon_294":"Researched"
+"blueprint_weapon_321":"Researched"
+"blueprint_weapon_333":"Researched"
+"blueprint_weapon_340":"Researched"
+"blueprint_weapon_341":"Researched"
+"blueprint_weapon_342":"Researched"
+"blueprint_weapon_344":"Researched"
+"blueprint_weapon_356":"Researched"
+"blueprint_weapon_370":"Researched"
+"blueprint_weapon_373":"Researched"
+"blueprint_weapon_380":"Researched"
+"blueprint_weapon_381":"Researched"
+"blueprint_weapon_385":"Researched"
+"blueprint_weapon_386":"Researched"
+"blueprint_weapon_387":"Researched"
+"blueprint_weapon_392":"Researched"
+"blueprint_weapon_393":"Researched"
+"blueprint_weapon_397":"Researched"
+"blueprint_weapon_394":"Researched"
+"blueprint_weapon_395":"Researched"
+"blueprint_weapon_396":"Researched"
+"blueprint_weapon_398":"Researched"
+"blueprint_weapon_407":"Researched",
+"blueprint_weapon_408":"Researched",
+"blueprint_weapon_409":"Researched",
+"blueprint_weapon_411":"Researched",
+"blueprint_weapon_413":"Researched",
+"blueprint_weapon_415":"Researched",
+"blueprint_weapon_416":"Researched",
+"blueprint_weapon_bossrushfinal":"Researched"
+"blueprint_weapon_bossrushfinalA":"Researched"
+"blueprint_weapon_bossrushfinalB":"Researched"
+"blueprint_weapon_fel_fabric":"Researched"
+"blueprint_weapon_383":"Researched"
+"blueprint_weapon_cg_0":"Researched"
+"blueprint_weapon_cg_1":"Researched"
+"blueprint_weapon_cg_2":"Researched"
+"blueprint_weapon_cg_3":"Researched"
+"blueprint_weapon_fish_rod_a":"Researched"
+"blueprint_weapon_fish_rod_b":"Researched"
+"blueprint_weapon_fish_rod_c":"Researched"
+"blueprint_weapon_fish_rod_d":"Researched"
+
+大厅装饰
+水帘洞府 "hall_skin_1":"Got"
+骑土之家 "hall_skin_2":"Got"
+观星-议事厅 "hall_skin_3":"Got"
+连环战船-壹 "hall_skin_4":"Got"
+欧博士的会客间 "hall_skin_5":"Got"
+
+花园装饰
+水帘洞露天庭院 "garden_skin_1":"Got"
+观星-坠星坛 "garden_skin_2":"Got"
+整装待渡 "garden_skin_3":"Got"
+欧博士的制造厂 "garden_skin_4":"Got"
+
+工坊装饰
+欧博士的维修站 "work_shop_skin_1":"Got"
+水帘洞甲仗库 "work_shop_skin_2":"Got"
+观星-造物所 "work_shop_skin_3":"Got"
+连环战船-贰 "work_shop_skin_4":"Got"
+
+魔法区装饰
+水帘洞神龛 "magic_area_skin_1":"Got"
+观星-魔法场 "magic_area_skin_2":"Got"
+连环战船-叁 "magic_area_skin_3":"Got"
+欧博士的实验室 "magic_area_skin_4":"Got"
+
+联机房装饰
+一出好戏 "multi_room_skin_1":"Got"
+清云台 "multi_room_skin_2":"Got"
+失落祭坛 "multi_room_skin_3":"Got"
+赤红的铸锻间 "multi_room_skin_4":"Got"
+天台见 "multi_room_skin_5":"Got"
+雪地矿山 "multi_room_skin_6":"Got"
+作战会议 "multi_room_skin_7":"Got"
+世界大观 "multi_room_skin_8":"Got"
+终末圣殿 "multi_room_skin_9":"Got"
+据点：浪潮 "multi_room_skin_10":"Got"
+欧博士的秘密基地 "multi_room_skin_11":"Got"
+雷霆派对 "multi_room_skin_12":"Got"
+通天河的故事 "multi_room_skin_13":"Got"
+神谕圣殿 "multi_room_skin_14":"Got"
+海风假日 "multi_room_skin_15":"Got"
+练字时间 "multi_room_skin_16":"Got"
+决战将至 "multi_room_skin_17":"Got"
+龙之仙域 "multi_room_skin_18":"Got"
+摇滚之夜 "multi_room_skin_19":"Got"
+
+武器类2
+"blueprint_evolution_weapon_007":"Got"
+"blueprint_evolution_weapon_231":"Got"
+"blueprint_evolution_weapon_006":"Got"
+"blueprint_evolution_weapon_315":"Got"
+"blueprint_evolution_weapon_111":"Got"
+"blueprint_evolution_weapon_275":"Got"
+"blueprint_evolution_weapon_038":"Got"
+"blueprint_evolution_weapon_311":"Got"
+
+
+"seeds"种子(后面的数字是数量 缺哪些加上去就行 没获得的不会显示)
+妙妙花 "plant_fantastic_flower_seed":301
+竹子 "plant_banboo_seed":500
+二叉树 "plant_binary_tree_seed":804
+冻梨 "plant_icepear_seed":241
+仙人掌 "plant_cactus_seed":303
+萝卜 "plant_carrot_seed":803
+君子兰 "plant_clivia_seed":805
+曼陀罗花 "plant_datura_seed":303
+守护花 "plant_defend_flower_seed":803
+火龙果树 "plant_dragon_tree_seed":303
+食人花 "plant_eator_seed":123
+爆竹 "plant_firecracker_seed":304
+齿轮花 "plant_gear_flower_seed":304
+宝石花 "plant_gem_flower_seed":388
+宝石树 "plant_gem_tree_seed":885
+七色堇 "plant_heptacolor_seed":123
+铁树 "plant_iron_tree_seed":803
+薰衣草 "plant_lavender_seed":803
+天山雪莲 "plant_lotus_seed":301
+曼珠沙华 "plant_lycoris_seed":309
+魔力花 "plant_magic_flower_seed":303
+曼德拉草 "plant_mandrake_seed":303
+镜面花 "plant_mirror_plane_flower_seed":303
+黄金蘑菇 "plant_mushroom_gold_seed":308
+水晶蘑菇 "plant_mushroom_seed":304
+南瓜 "plant_pumpkin_seed":307
+七里香 "plant_qilixiang_seed":124
+雷达花 "plant_radar_seed":311
+彩虹草 "plant_rainbow_grass_seed":806
+洛神葵 "plant_roselle_seed":806
+迷迭香 "plant_rosemary_seed":805
+大葱 "plant_shallot_seed":805
+银白扬 "plant_silver_poplar_seed":314
+奇异花 "plant_strange_flower_seed":305
+橡树 "plant_tree_seed":618
+蓝枣花 "plant_trumpet_seed":482
+藤蔓 "plant_vine_seed":357
+西瓜 "plant_watermelon_seed":318
+冬虫夏草 "plant_worm_seed":269
+粽子花 "plant_zongzi_seed":369
+圣诞树 "plant_xmas_seed":167
+猪笼草 "plant_nepenthes_seed":147
+锂之花 "plant_lithiumflower_seed":586
+黑玫瑰 "plant_blackrose_seed":123
+蟠桃 "plant_flatpeach_seed":166
+水晶兰 "plant_monotropa_seed":178
+人参 "plant_ginseng_seed":192
+
+
+"materials"材料(后面的数字就是数量要多少直接改）
+小鱼干"material_fish":67056,
+古代武器残页"material_ancient_weapon_fragment":4761,
+电池"material_battery":5677
+生物质"material_cell":5798
+木材"material_wood":5356
+铁矿"material_iron":5735
+肥料"material_fertilize":5083
+维c碎片"material_fragment_c6h8o6":2005
+祖兰碎片"material_fragment_zulan":1132
+零件"material_gear":5972
+宠物饲料"material_grain":1083
+通用图纸碎片"material_jewelry_fragment":99
+魔法碎片-黑"material_magic_black":806
+魔法碎片-蓝"material_magic_blue":988
+魔法碎片-青"material_magic_cyan":789
+魔法碎片-绿"material_magic_green":995
+魔法碎片-橙"material_magic_orange":948
+魔法碎片-紫"material_magic_purple":879
+魔法碎片-红"material_magic_red":801
+角色试玩劵"material_ticket":810
+羽毛"material_ticket_bossrush":805
+红色通用武器进化碎片"material_generic_weapon_fragment_5":5200
+橙色通用武器进化碎片"material_generic_weapon_fragment_4":5200
+紫色通用武器进化碎片"material_generic_weapon_fragment_3":5200
+蓝色通用武器进化碎片"material_generic_weapon_fragment_2":5200
+绿色通用武器进化碎片"material_generic_weapon_fragment_1":5200
+
+角色皮肤碎片(一般不用改这个)
+"material_skill_Druid_1":0,
+"material_skill_Officer_2":0,
+"material_skill_Priest_1":0,
+"material_skill_Warlock_1":0,
+"material_skill_Viking_2":0,
+"material_skin_fragment_boss01":0,
+"material_skin_fragment_boss02":0,
+"material_skin_fragment_boss07":0,
+"material_skin_fragment_boss08":0,
+"material_skin_fragment_boss10":0,
+"material_skin_fragment_boss15":0,
+"material_skin_fragment_boss16":0,
+"material_skin_fragment_boss18":0,
+"material_skin_fragment_boss19":0,
+"material_skin_fragment_boss23":0,
+"material_skin_fragment_boss30":0,
+"material_skin_fragment_c12_s06":0,
+"material_skin_fragment_c12_s12":0,
+"material_skin_fragment_c12_s6":0,
+"material_skin_fragment_c14_s13":0,
+"material_skin_fragment_c16_s6":0,
+"material_skin_fragment_c25_s4":1,
+"material_skin_fragment_c5_s8":0,
+"material_skin_fragment_law":0,
+"material_skin_fragment_shop":0,
+
+磁带
+    "material_tape_alien":1, 超行星旅行
+    "material_tape_assassin_27":1, 黯乐寅主
+    "material_tape_aurora":1, 数码雷霆 #2
+    "material_tape_aurora_wrong_version":1, 数码雷霆 #2 (Demo)
+    "material_tape_boss1":1, 强手
+    "material_tape_boss2":1, 劲敌
+    "material_tape_boss3":1, 决战
+    "material_tape_boss4":1, 遗迹之战
+    "material_tape_castle":1, 英雄的化身
+    "material_tape_chess":1, 王车易位进行曲
+    "material_tape_civilization":1, 环球旅行序曲
+    "material_tape_dark":1, 神秘大碟
+    "material_tape_defence":1, 直到黎明尽头
+    "material_tape_easter":1, 春天的礼物
+    "material_tape_end_temple":1, 跪伏在神脚边
+    "material_tape_forest":1, 勇闯密林深处
+    "material_tape_four_seasons":1, 梦屿四季谣
+    "material_tape_unrivaled_archenemy":1, 争星夺月
+    "material_tape_warlock_16":1, 哀渡星河
+    "material_tape_warliege_12":1 哀唳穹宇
+    "material_tape_grave":1, 小心坠落
+    "material_tape_graveyard":1, 漆黑地牢
+    "material_tape_hall_cny":1, 新春新气象
+    "material_tape_halloween":1, 万圣节幽影
+    "material_tape_heroBall":1, 数码空间
+    "material_tape_ice":1, 冰风暴
+    "material_tape_icecave":1, 地表下的秘密
+    "material_tape_irontide_multiroom":1, 宕冢深处
+    "material_tape_island":1, 钢铁破浪者永不沉没
+    "material_tape_joker_7":1, 绮光旋乐
+    "material_tape_level_2g":1, 联结主义万岁
+    "material_tape_level_2g.":1,
+    "material_tape_level_4g":1, 群峦之颠
+    "material_tape_monster":1, 功成行满
+    "material_tape_mythology":1, 逍遥乐
+    "material_tape_neon":1, 数码雷霆 #1
+    "material_tape_opera":1, 群英荟萃
+    "material_tape_party":1, 落日余晖
+    "material_tape_ruins":1, 远眺那辉煌的神庙
+    "material_tape_stars":1, 星河之畔
+    "material_tape_stronghold_wave":1, 茶歇时光
+    "material_tape_summer":1, 夏天的味道
+    "material_tape_rock_girl":1, 星♦凛♦咲♦舞
+    "material_tape_dragon_boy":1, 祥瑞之境
+    "material_tape_swamp":1, 赞美诗
+    "material_tape_thunderstorm":1, 数码雷霆 #3
+    "material_tape_volcano":1, 翻滚的岩浆
+    "material_tape_doctor_6":1, 鼓-节奏之心
+    "material_tape_zhuazhua":1, 数码雷霆 #4
+    "material_tape_elves_17":1, 吉他-韵律之弦
+    "material_tape_sword_master_4":1, 贝斯-节拍之魂
+    "material_tape_necromancer_16":1, 键盘-和声之键
+    "material_tape_bgm_multi_room_skin_17":1, 集结令
+    "material_tape_airbender_16":1, 藏怒燎原
+    "material_tape_boss_void_origin":1, 终焉时刻
+    "material_tape_ninja_6":1, 怒烬灼华
+    "material_tape_mecha":1, 机甲再临
+    
+"tokenTickets"兑换券修改(几千就够了不建议改太多)
+英雄角色试玩券
+token_hero":999,
+武器配件
+"token_equipment_none_0":2803,直接复制粘贴就行了
+武器兑换券格式
+"token_weapon_weapon_135_5":143
+以上代码token_weapon代表武器类兑换券 weapon_135是一拳的武器代码5代表品质 白0绿1蓝2紫3橙4红5 143代表数量 也就是有143个一拳兑换券 所以添加其他武器兑换券翻武器代码大全找到对应武器按以上格式加进去就行了
+因子兑换券格式
+"token_factor_InfinteEnergy_5":143
+以上代码token_factor代表因子类兑换券 InfinteEnergy是无限蓝因子 5不用管 143是兑换券数量 添加其他因子兑换券翻因子代码大全找到对应因子按照以上格式加进去就行了
+种子兑换券格式
+"token_seed_none_5":875
+"token_seed代表种子类兑换券 none代表随机 5代表品质 跟武器品质差不多 875代表数量 按照这个格式改就行了
+
+其他内容
+   plantName植物名，
+   state生长状态，
+   watered浇水，
+   fertilized施肥
+   sellerRefreshTime:工坊神秘商贩售货刷新
+   cumulativeFishCount:累计鱼获量，小鱼干充值奖励
+   commodities:神秘商贩商品
+   forgeWeapons:锻造台武器
+   bossrush_time:试炼之地已使用次数 改成0还能打
+   "egg_machine_times":扭蛋机次数

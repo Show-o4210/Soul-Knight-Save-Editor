@@ -1,0 +1,86 @@
+因子代码
+
+恶性因子
+1 双倍血量 - EnemyDoubleHp
+2 敌人更密集 - Intensive
+3 精英怪 - ExEnemy
+4 敌人子弹速度增加 - FastEnemyBullet
+5 敌人更具攻击性 - AggressiveEnemy
+6 敌人防御+1 - EnemyDefence
+7 敌人移速更快 - FastEnemy
+8 护盾不再自动恢复 但更具防御力 - HardShield
+9 血量固定1 - LackHp
+10 地牢扩建 - LongMap
+13 双boss - DoubleBoss
+14 受击后附加随机异常状态 冷却为5秒 - Exception
+103 坏运气 - BadLuck
+104 技能冷却翻倍 - DoubleCd
+105 不能带宠物和随从 - AllAlone
+106 地牢物价翻倍 - Inflation
+107 敌人负面效果时间减半 - EnemyBuffImmune
+108 蓝上限减半 - LackEnergy
+109 只能带一把武器  - OneWeapon
+110 普通宝箱只会出金币炸弹 - BombGift
+111 药水效果减半 - InferiorMedicine
+112 武器过热 - WeaponOverheating
+209 敌人受击后瞬移 - EnemyFlash
+210 敌人血减半后分裂 - EnemySplit
+211 地牢顺序被打乱 - SleepWalking
+212 状态面板失效 - Painless
+213 视野受限 - Dark
+217 定期出现激光会跟踪角色并造成伤害 - TrackingLaser
+218 关卡内部分箱子变成特殊箱子 - BoxMutation
+219 瘴气弥漫 - BlackFog
+
+良性因子
+301 多重雕像 - MultiStatue
+302 好运气 - GoodLuck
+疯狂匕首 - Cruel
+冷却减半 - HalfCd
+无限能量 - InfiniteEnergy
+越战越勇 - MoreBrave
+天赋异禀 - MoreBuff
+天赋自助餐 - MoreChoice
+神灯 - FullHouse
+驯兽师 - GainMount
+天降神兵 - GainWeapon
+宠物巨大化 - HugePet
+复活+1 - RebornTwice
+特卖日 - SaleDay
+生命恢复术 - Tenacious
+配件大师W - eaponEquip
+
+中性因子
+101 天赋位置-1 选天赋时选项+1 - LessBuff
+102 天赋位置+1 选天赋时选项-1 - LessChoice
+201 只能用近战武器 - MelleOnly
+202 攻速减半伤害翻倍 - SlowShooter
+203 攻速翻倍伤害减半 - FastShooter
+204 暴率翻倍暴伤减半 - DoubleCritic
+205 角色变大 - Huge
+206 角色变小 - Tiny
+207 每关会重铸武器 - ReforgeWeapon
+208 每关随机换角色 - RandomCharactor
+214 时间流速不稳定 - TimeDistortion
+215 既视感 - Dejavu
+216 配置错误 - WrongConfig
+
+额外添加的
+经脉畅通 - RenduErmai
+赐福手杖 - Blessing
+心智坚毅 - Endurance
+体魄强健 - Might
+经脉错乱 - MeridianDisorder
+盗墓者诅咒 - Curse
+精神错乱 - Psyche
+冻伤 - Frozen
+
+周挑战
+爆爆爆 - BoomBoomBoom
+红色通缉令 - TopWanted
+时空裂隙 - FloorCrack
+命中注定 - ItIsFate
+怪物飞艇 - MonsterAircraft
+扭曲空间 - SpaceDistortion
+与时间赛跑 - TimeRacing
+火山喷发 - VolcanoEruption
