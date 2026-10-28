@@ -79,6 +79,7 @@ data class AssistantState(
     val snapshot: SaveSnapshot? = null,
     val pinnedTarget: PinnedSaveTarget? = null,
     val accounts: List<String> = emptyList(),
+    val dataMode: SaveDataMode? = null,
     val catalog: Catalog? = null,
     val relockInventory: RelockInventory? = null,
     val relockMessage: String = "请先读取存档",
@@ -108,6 +109,7 @@ data class AssistantState(
     val weaponMessage: String = "请先扫描武器存档",
     val preview: SavePlan? = null,
     val previewMode: AssistantMode? = null,
+    val previewDataMode: SaveDataMode? = null,
     val applyOutcome: ApplyOutcome? = null,
     val pending: List<String> = emptyList(),
     val pendingPackages: Map<String, String> = emptyMap(),
@@ -138,7 +140,7 @@ fun AssistantState.navigate(target: AssistantPage): AssistantState = copy(
     page = target,
     settingsReturnPage = if (target in setOf(AssistantPage.SETTINGS, AssistantPage.BACKUPS) && page == AssistantPage.WORKSPACE) page else settingsReturnPage,
     preview = null,
-    previewMode = null
+    previewMode = null, previewDataMode = null
 )
 
 fun AssistantState.selectAccessBackend(backend: AccessBackend): AssistantState {
@@ -170,7 +172,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             viewModelScope.launch {
                 val shizuku = device as? ShizukuSaveAccess ?: return@launch
                 if (!shizuku.connected) state = state.clearLoaded("Shizuku 访问上下文已变化，请检查状态并重新读取。", clearTarget = true)
-                state = state.copy(accessStatus = shizuku.statusString, preview = null, previewMode = null)
+                state = state.copy(accessStatus = shizuku.statusString, preview = null, previewMode = null, previewDataMode = null)
             }
         }
     }
@@ -236,7 +238,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val operationDevice = device
         val operationRepository = repository
         var failureDiagnostic: String? = null
-        state = state.copy(busy = true, preview = null, previewMode = null)
+        state = state.copy(busy = true, preview = null, previewMode = null, previewDataMode = null)
         viewModelScope.launch {
             var succeeded = false
             try { block(); succeeded = true } catch (error: Exception) {
@@ -323,7 +325,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         settings.edit().apply { if (state.rememberMode) putString("mode", mode.name) else remove("mode") }.apply()
         state = state.copy(mode = mode, page = AssistantPage.WORKSPACE, settingsReturnPage = AssistantPage.WORKSPACE,
             workspaceTab = if (mode == AssistantMode.FREE) WorkspaceTabs.free.id else if (state.snapshot == null || state.workspaceTab == WorkspaceTabs.free.id) WorkspaceTabs.saves.id else state.workspaceTab,
-            preview = null, previewMode = null)
+            preview = null, previewMode = null, previewDataMode = null)
     }
     fun rememberMode(value: Boolean) {
         settings.edit().putBoolean("rememberMode", value).apply {
@@ -332,7 +334,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(rememberMode = value)
     }
     fun guide() { if (!state.busy) state = state.copy(mode = null, page = AssistantPage.WORKSPACE,
-        settingsReturnPage = AssistantPage.WORKSPACE, preview = null, previewMode = null) }
+        settingsReturnPage = AssistantPage.WORKSPACE, preview = null, previewMode = null, previewDataMode = null) }
     fun page(page: AssistantPage) {
         if (!state.busy) state = state.navigate(page)
     }
@@ -435,10 +437,35 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         state = state.clearLoaded("修改完成，但刷新失败：${error.message}。请刷新或重新查找存档。")
         false
     }
-    private suspend fun loadAccount(account: String, clearDrafts: Boolean = true) {
+    private fun dataModeKey(snapshot: SaveSnapshot, account: String) =
+        "saveDataMode:${snapshot.packageName}:${snapshot.user}:$account"
+
+    fun dataMode(mode: SaveDataMode) {
+        if (state.busy || state.pending.isNotEmpty()) return
+        val snapshot = state.snapshot ?: return
+        val account = state.catalog?.account ?: return
+        if (mode == state.dataMode) return
+        work {
+            loadAccount(account, selectedDataMode = mode)
+            check(settings.edit().putString(dataModeKey(snapshot, account), mode.name).commit()) { "无法保存存档格式选择" }
+            state = state.copy(message = "已切换为${mode.label} ${mode.extension}，待修改内容已清空。")
+        }
+    }
+
+    private suspend fun loadAccount(account: String, clearDrafts: Boolean = true, selectedDataMode: SaveDataMode? = null) {
         val snapshot = requireNotNull(state.snapshot)
         require(account in state.accounts)
-        val report = withContext(Dispatchers.Default) { SaveInspector.inspect(snapshot, account) }
+        val dataMode = selectedDataMode ?: settings.getString(dataModeKey(snapshot, account), null)
+            ?.let { runCatching { SaveDataMode.valueOf(it) }.getOrNull() } ?: SaveDataMode.initial(snapshot, account)
+        if (dataMode == null) {
+            state = state.clearLoaded("新旧存档同时存在，无法确认读取配置。请先选择本次编辑的存档格式。")
+                .copy(snapshot = snapshot, accounts = EditEngine.accounts(snapshot),
+                    pinnedTarget = PinnedSaveTarget.from(snapshot, account),
+                    catalog = Catalog(EditEngine.accounts(snapshot), account, emptyList(), true))
+            relockContext = null
+            return
+        }
+        val report = withContext(Dispatchers.Default) { SaveInspector.inspect(snapshot, account, dataMode) }
         val characters = report.characters
         val items = report.items
         val pets = report.pets
@@ -458,7 +485,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             }
         }
         relock.getOrNull()?.let { relockContext = it.first }
-        state = state.copy(pinnedTarget = PinnedSaveTarget.from(snapshot, account), progression = report.progression.getOrNull().orEmpty(), weaponStates = report.weapons.getOrNull().orEmpty(), expertItems = if (clearDrafts) ItemChoices() else state.expertItems, expertWeapons = if (clearDrafts) WeaponChoices() else state.expertWeapons, catalog = catalog, petStates = pets.getOrNull().orEmpty(),
+        state = state.copy(dataMode = dataMode, pinnedTarget = PinnedSaveTarget.from(snapshot, account), progression = report.progression.getOrNull().orEmpty(), weaponStates = report.weapons.getOrNull().orEmpty(), expertItems = if (clearDrafts) ItemChoices() else state.expertItems, expertWeapons = if (clearDrafts) WeaponChoices() else state.expertWeapons, catalog = catalog, petStates = pets.getOrNull().orEmpty(),
             relockInventory = relock.getOrNull()?.second,
             relockMessage = relock.fold({ (_, _, sources) ->
                 (if (sources.sourceCount > 0) "已核对 ${sources.sourceCount} 份备份原件，优先恢复解锁前原值。" else "没有可用的解锁前原件；已核对当前游戏的适用参考，锁值未知的跳过。") +
@@ -483,7 +510,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             mythicMessage = mythic.fold({ "已核对 ${it.states.size} 把神话武器。" }, { it.message ?: "神话武器读取失败" }),
             quickMythic = if (clearDrafts) MythicSelection() else state.quickMythic,
             expertMythic = if (clearDrafts) MythicSelection() else state.expertMythic,
-            preview = null, previewMode = null,
+            preview = null, previewMode = null, previewDataMode = null,
             message = if (characters.isFailure) "角色暂不可用：${characters.exceptionOrNull()?.message}"
                 else "存档已就绪，可以开始编辑。")
     }
@@ -496,51 +523,51 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         return RelockScope(snapshot.packageName, snapshot.user, info?.versionName, code)
     }
     fun account(account: String) = work { loadAccount(account) }
-    fun select(selection: UnlockSelection) { if (!state.busy && state.mode == AssistantMode.EXPERT) state = state.copy(choices = state.choices.copy(expert = selection), preview = null, previewMode = null) }
+    fun select(selection: UnlockSelection) { if (!state.busy && state.mode == AssistantMode.EXPERT) state = state.copy(choices = state.choices.copy(expert = selection), preview = null, previewMode = null, previewDataMode = null) }
     fun characterRelock(value: Boolean) {
         val mode = state.mode ?: return
         if (!state.busy && mode != AssistantMode.FREE)
-            state = state.copy(choices = state.choices.withRelock(mode, value), preview = null, previewMode = null)
+            state = state.copy(choices = state.choices.withRelock(mode, value), preview = null, previewMode = null, previewDataMode = null)
     }
     fun quick(roles: Boolean = state.choices.quickRoles, skins: Boolean = state.choices.quickSkins,
         levels: Boolean = state.choices.quickLevels, skills: Boolean = state.choices.quickSkills,
         pets: Boolean = state.choices.quickPets) {
         if (!state.busy && state.mode == AssistantMode.QUICK) state = state.copy(choices = state.choices.copy(quickRoles = roles, quickSkins = skins,
-            quickLevels = levels, quickSkills = skills, quickPets = pets), preview = null, previewMode = null)
+            quickLevels = levels, quickSkills = skills, quickPets = pets), preview = null, previewMode = null, previewDataMode = null)
     }
     fun items(choices: ItemChoices) {
         if (!state.busy && state.mode == AssistantMode.QUICK && state.itemRoot != null)
-            state = state.copy(itemChoices = choices, preview = null, previewMode = null)
+            state = state.copy(itemChoices = choices, preview = null, previewMode = null, previewDataMode = null)
     }
     fun expertItems(choices: ItemChoices) {
         if (!state.busy && state.mode == AssistantMode.EXPERT && state.itemRoot != null)
-            state = state.copy(expertItems = choices, preview = null, previewMode = null)
+            state = state.copy(expertItems = choices, preview = null, previewMode = null, previewDataMode = null)
     }
     fun expertWeapons(choices: WeaponChoices) {
         if (!state.busy && state.mode == AssistantMode.EXPERT && state.weaponInfo != null)
-            state = state.copy(expertWeapons = choices, preview = null, previewMode = null)
+            state = state.copy(expertWeapons = choices, preview = null, previewMode = null, previewDataMode = null)
     }
     fun weaponSkins(selection: WeaponSkinSelection) {
         if (state.busy || state.weaponSkinInventory == null) return
         state = when (state.mode) {
-            AssistantMode.QUICK -> state.copy(quickWeaponSkins = selection, preview = null, previewMode = null)
-            AssistantMode.EXPERT -> state.copy(expertWeaponSkins = selection, preview = null, previewMode = null)
+            AssistantMode.QUICK -> state.copy(quickWeaponSkins = selection, preview = null, previewMode = null, previewDataMode = null)
+            AssistantMode.EXPERT -> state.copy(expertWeaponSkins = selection, preview = null, previewMode = null, previewDataMode = null)
             else -> return
         }
     }
     fun weaponEvolution(selection: WeaponEvolutionSelection) {
         if (state.busy || state.weaponEvolutionInventory == null) return
         state = when (state.mode) {
-            AssistantMode.QUICK -> state.copy(quickWeaponEvolution = selection, preview = null, previewMode = null)
-            AssistantMode.EXPERT -> state.copy(expertWeaponEvolution = selection, preview = null, previewMode = null)
+            AssistantMode.QUICK -> state.copy(quickWeaponEvolution = selection, preview = null, previewMode = null, previewDataMode = null)
+            AssistantMode.EXPERT -> state.copy(expertWeaponEvolution = selection, preview = null, previewMode = null, previewDataMode = null)
             else -> return
         }
     }
     fun mythic(selection: MythicSelection) {
         if (state.busy || state.mythicInventory == null) return
         state = when (state.mode) {
-            AssistantMode.QUICK -> state.copy(quickMythic = selection, preview = null, previewMode = null)
-            AssistantMode.EXPERT -> state.copy(expertMythic = selection, preview = null, previewMode = null)
+            AssistantMode.QUICK -> state.copy(quickMythic = selection, preview = null, previewMode = null, previewDataMode = null)
+            AssistantMode.EXPERT -> state.copy(expertMythic = selection, preview = null, previewMode = null, previewDataMode = null)
             else -> return
         }
     }
@@ -552,7 +579,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     }
     fun weapons(value: Boolean) {
         if (!state.busy && state.mode == AssistantMode.QUICK && state.weaponInfo != null)
-            state = state.copy(choices = state.choices.copy(quickWeapons = value), preview = null, previewMode = null)
+            state = state.copy(choices = state.choices.copy(quickWeapons = value), preview = null, previewMode = null, previewDataMode = null)
     }
     fun addItem(key: ItemKey) {
         val root = state.itemRoot ?: return
@@ -573,15 +600,20 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             state = state.copy(personalUseAccepted = true, consentPromptVisible = false)
         else state = state.copy(message = "无法保存个人使用确认，请检查应用存储。")
     }
-    fun declinePersonalUse() { state = state.copy(consentPromptVisible = false, preview = null, previewMode = null) }
+    fun declinePersonalUse() { state = state.copy(consentPromptVisible = false, preview = null, previewMode = null, previewDataMode = null) }
     fun requestConsent() { state = state.copy(consentPromptVisible = true) }
     fun preview() = work {
         require(state.personalUseAccepted) { "请先确认仅用于自己的本地存档" }
         require(state.pending.isEmpty()) { "请先恢复未完成的修改" }
+        val dataMode = requireNotNull(state.dataMode) { "请先在存档页选择 .data 或 .data.new 格式" }
         try { rereadTarget(clearDrafts = false) }
         catch (error: Exception) {
             state = state.clearLoaded("读取当前存档失败：${error.message}。请刷新或重新查找。")
             throw IllegalStateException(state.message, error)
+        }
+        if (state.dataMode != dataMode) {
+            state.catalog?.account?.let { loadAccount(it, clearDrafts = true) }
+            error("游戏读取配置已变化，待修改内容已清空。请核对存档格式后重新选择。")
         }
         val snapshot = requireNotNull(state.snapshot)
         val catalog = requireNotNull(state.catalog)
@@ -590,20 +622,21 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val items = state.itemsFor(mode).selection()
         val patch = withContext(Dispatchers.Default) { EditEngine.preview(snapshot, catalog.account, selection, items, state.weaponsFor(mode), state.weaponSkinsFor(mode),
             state.weaponEvolutionFor(mode), state.mythicFor(mode),
-            relockScope = relockContext?.first, relockOriginals = relockContext?.second.orEmpty()) }
+            relockScope = relockContext?.first, relockOriginals = relockContext?.second.orEmpty(), dataMode = dataMode) }
         if (patch.outputs.isEmpty()) state = state.copy(message = if (selection.relock) {
             "没有可写回的重新锁定变化。" + patch.changes.take(5).joinToString("；") +
                 (if (patch.changes.isEmpty()) "请查看重新锁定页面中的保留与跳过说明。" else "")
         } else "所选内容没有变化，无需写入。")
-        else state = state.copy(preview = patch, previewMode = mode)
+        else state = state.copy(preview = patch, previewMode = mode, previewDataMode = dataMode)
     }
-    fun dismiss() { if (!state.busy) state = state.copy(preview = null, previewMode = null) }
+    fun dismiss() { if (!state.busy) state = state.copy(preview = null, previewMode = null, previewDataMode = null) }
     fun dismissApplyOutcome() { if (!state.busy) state = state.copy(applyOutcome = null) }
     fun apply() {
-        if (!state.personalUseAccepted) { state = state.copy(preview = null, previewMode = null, message = "请先确认仅用于自己的本地存档"); return }
+        if (!state.personalUseAccepted) { state = state.copy(preview = null, previewMode = null, previewDataMode = null, message = "请先确认仅用于自己的本地存档"); return }
         val patch = state.preview ?: return
         val snapshot = (if (state.previewMode == AssistantMode.FREE) state.freeSession?.snapshot else state.snapshot) ?: return
         if (state.previewMode != state.mode) { dismiss(); return }
+        if (state.previewMode != AssistantMode.FREE && state.previewDataMode != state.dataMode) { dismiss(); return }
         work(onFailure = { error ->
             state = state.copy(applyOutcome = ApplyOutcome(false, snapshot.packageName, 0,
                 emptyList(), listOf(error.message ?: "写回未完成；请查看备份状态")))
@@ -624,13 +657,14 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun restore(id: String, recovery: Boolean) = work {
-        withContext(Dispatchers.IO) { if (recovery) repository.recover(id) else repository.restore(id) }
+        val dataMode = if (recovery) SaveDataMode.LEGACY else requireNotNull(state.dataMode) { "请先在存档页选择还原使用的存档格式" }
+        withContext(Dispatchers.IO) { if (recovery) repository.recover(id) else repository.restore(id, dataMode) }
         if (state.pinnedTarget?.packageName == repository.packageName(id)) {
             val refreshed = refreshAfterWrite()
             if (refreshed) state = state.copy(message = "已恢复，存档已刷新，可以继续编辑。")
         } else state = state.clearLoaded("已恢复原存档。")
     }
-    fun restoreBackup(key: String) = work {
+    fun restoreBackup(key: String, dataMode: SaveDataMode = state.dataMode ?: SaveDataMode.LEGACY) = work {
         val record = state.backupRecords.singleOrNull { it.key == key } ?: error("备份不存在，请刷新列表")
         require(record.packageName == state.packageName) { "请先选择备份对应的游戏版本" }
         withContext(Dispatchers.IO) {
@@ -638,17 +672,18 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             if (key.startsWith("transaction:")) {
                 val id = key.removePrefix("transaction:")
                 require(repository.originals(id).user == user) { "备份属于其他 Android 用户，不能直接还原" }
-                repository.restore(id)
+                repository.restore(id, dataMode)
             } else {
                 val info = state.archives.single { "archive:${it.file.name}" == key }
                 require(info.file.canonicalFile.parentFile == archiveDirectory.canonicalFile)
                 val payload = BackupArchive.read(info.file)
                 require(payload.packageName == state.packageName && payload.user == user) { "备份与当前游戏或 Android 用户不一致" }
                 val fallback = if (payload.files.none { it.path.contains("/shared_prefs/") }) device.scan(payload.packageName, payload.user).prefs?.path else null
-                repository.restore(payload, fallback)
+                repository.restore(payload, fallback, dataMode)
             }
         }
-        state = state.clearLoaded("存档已还原，已有读取开关已设为 0。请重新读取存档。", clearTarget = true)
+        state = state.clearLoaded("存档已还原。" + if (dataMode == SaveDataMode.MODERN)
+            "读取开关按备份原值恢复，未强制归零。请重新读取存档。" else "已有读取开关已设为 0。请重新读取存档。", clearTarget = true)
     }
     fun renameBackup(key: String, name: String) = work {
         require(state.backupRecords.any { it.key == key }) { "备份不存在" }
@@ -711,7 +746,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
     }
     fun freeSelect(path: String, selected: Boolean) {
         if (!state.busy && state.freeSources.any { it.path == path }) state = state.copy(
-            freeSelected = if (selected) state.freeSelected + path else state.freeSelected - path, preview = null, previewMode = null)
+            freeSelected = if (selected) state.freeSelected + path else state.freeSelected - path, preview = null, previewMode = null, previewDataMode = null)
     }
     fun freeAccount(account: String) {
         if (!state.busy && account in state.freeAccounts) state = state.copy(freeAccount = account)
@@ -746,7 +781,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         state = state.copy(freeReview = review, message = "导入比较完成：${review.changed} 份内容变化，${review.unresolved} 份待选择，${review.ignored.size} 个多余文件已忽略。")
     }
     fun freeChoose(path: String, id: String?) {
-        if (!state.busy) state = state.copy(freeReview = state.freeReview?.select(path, id), preview = null, previewMode = null)
+        if (!state.busy) state = state.copy(freeReview = state.freeReview?.select(path, id), preview = null, previewMode = null, previewDataMode = null)
     }
     fun freePreview() = work {
         require(state.mode == AssistantMode.FREE && state.personalUseAccepted) { "请先确认个人使用约定" }

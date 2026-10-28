@@ -18,6 +18,7 @@ internal fun hasLegacyBase64Envelope(bytes: ByteArray): Boolean = bytes.all {
 
 /** Native Abo.CryptUtil: AES-256-CBC, zero padding, StreamWriter UTF-8 BOM JSON.
  * Constants were checked against the 8.7 RGGameConst static arrays and their SHA-256 field names.
+ * Aligned native samples have no padding; also accept a full block of trailing zeroes.
  * File selection and account binding remain the caller's responsibility. */
 object RijndaelCodec {
     private val key = SecretKeySpec(byteArrayOf(79, -11, 100, -75, -17, -91, 126, -89, -45, 32, -89, 20, -74, -70, -83, -118, 48, 122, 66, 108, 21, -81, 14, -102, 64, 112, -98, -80, 80, -82, 60, 64), "AES")
@@ -35,7 +36,7 @@ object RijndaelCodec {
             require(plain[0] == bom[0] && plain[1] == bom[1] && plain[2] == bom[2]) { "新格式分片缺少已知 UTF-8 BOM，未作修改" }
             var end = plain.size
             while (end > 0 && plain[end - 1] == 0.toByte()) end--
-            require(plain.size - end < 16 && end > bom.size) { "新格式分片零填充无效" }
+            require(plain.size - end <= 16 && end > bom.size) { "新格式分片零填充无效" }
             Json.parseToJsonElement(UnlockEngine.utf8(plain.copyOfRange(bom.size, end))).jsonObject
         } catch (error: Exception) {
             throw IllegalArgumentException("新格式分片无法按已知格式解码，未作修改", error)

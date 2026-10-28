@@ -11,11 +11,11 @@ object WorkspaceTabs {
 }
 
 fun AssistantState.selectTab(tab: WorkspaceTab): AssistantState = copy(
-    page = AssistantPage.WORKSPACE, workspaceTab = tab.id, preview = null, previewMode = null
+    page = AssistantPage.WORKSPACE, workspaceTab = tab.id, preview = null, previewMode = null, previewDataMode = null
 )
 
 fun AssistantState.selectPackage(value: String): AssistantState = copy(
-    packageName = value, pinnedTarget = null, snapshot = null, catalog = null, petStates = emptyList(), petMessage = "请先扫描宠物存档", accounts = emptyList(),
+    packageName = value, pinnedTarget = null, snapshot = null, catalog = null, petStates = emptyList(), petMessage = "请先扫描宠物存档", accounts = emptyList(), dataMode = null,
     relockInventory = null, relockMessage = "请先读取存档以核对可重新锁定内容",
     freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(), freeAccounts = emptyList(), freeAccount = null,
     freeSession = null, freeReview = null, freeOpenRequest = null,
@@ -27,14 +27,14 @@ fun AssistantState.selectPackage(value: String): AssistantState = copy(
     quickWeaponEvolution = WeaponEvolutionSelection(), expertWeaponEvolution = WeaponEvolutionSelection(),
     mythicInventory = null, mythicMessage = "请先读取神话武器存档",
     quickMythic = MythicSelection(), expertMythic = MythicSelection(),
-    preview = null, previewMode = null, itemMessage = "请先扫描物品存档",
+    preview = null, previewMode = null, previewDataMode = null, itemMessage = "请先扫描物品存档",
     page = AssistantPage.WORKSPACE, workspaceTab = WorkspaceTabs.saves.id,
     message = "已切换目标，请扫描这个版本的本地存档。"
 )
 
 /** Discard stale content while retaining a session location unless the target version changes. */
 fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): AssistantState = copy(
-    snapshot = null, pinnedTarget = if (clearTarget) null else pinnedTarget, catalog = null, accounts = emptyList(),
+    snapshot = null, pinnedTarget = if (clearTarget) null else pinnedTarget, catalog = null, accounts = emptyList(), dataMode = null,
     relockInventory = null, relockMessage = "请先读取存档以核对可重新锁定内容",
     freeSnapshot = null, freeSources = emptyList(), freeSelected = emptySet(), freeAccounts = emptyList(), freeAccount = null, freeReview = null,
     progression = emptyList(), weaponStates = emptyList(), petStates = emptyList(), choices = ModeChoices(),
@@ -45,7 +45,7 @@ fun AssistantState.clearLoaded(message: String, clearTarget: Boolean = false): A
     quickWeaponEvolution = WeaponEvolutionSelection(), expertWeaponEvolution = WeaponEvolutionSelection(),
     mythicInventory = null, mythicMessage = "请先读取神话武器存档",
     quickMythic = MythicSelection(), expertMythic = MythicSelection(),
-    weaponInfo = null, preview = null, previewMode = null, message = message,
+    weaponInfo = null, preview = null, previewMode = null, previewDataMode = null, message = message,
     itemMessage = "请先读取存档", weaponMessage = "请先读取存档", petMessage = "请先读取存档"
 )
 
@@ -56,5 +56,5 @@ fun AssistantState.afterStorageFailure(error: Exception): AssistantState {
             AccessFailureKind.SOURCE_CHANGED, AccessFailureKind.TIMEOUT, AccessFailureKind.SESSION_DISCONNECTED)
     }
     val text = error.message ?: "操作未完成，已保存的备份仍保留"
-    return if (invalidates) clearLoaded(text) else copy(message = text, preview = null, previewMode = null)
+    return if (invalidates) clearLoaded(text) else copy(message = text, preview = null, previewMode = null, previewDataMode = null)
 }

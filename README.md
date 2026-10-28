@@ -2,7 +2,7 @@
 
 《元气骑士》本地存档编辑工具，可修改角色、皮肤、物品与武器数据，支持修改预览、备份和还原。
 
-**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc03/SoulKnightSaveEditor-2.0.5-rc03.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
+**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc04/SoulKnightSaveEditor-2.0.5-rc04.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
 
 ## 使用要求
 
@@ -14,9 +14,9 @@
 | 存档访问 | 默认使用原生 Root，也可使用通过 Root 启动的 Shizuku；不支持 Shizuku 的 ADB 模式 |
 | 游戏版本 | 适配 8.7.0，保留 8.6.0 支持；其他版本与渠道需单独验证 |
 
-当前 Android 版本：**`2.0.5-rc03`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
+当前 Android 版本：**`2.0.5-rc04`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
 
-本版修复 Pixel 6 原生 Magisk 的目录不可见问题：普通 `su` 优先，必要时自动使用全局挂载备用；分离各渠道查找策略。**最近实测：2026-10-23，Pixel 6 读取／刷新及光速虚拟机普通 Root 读取通过，适配 8.7.0。** 具体变动见[发布说明](docs/releases/2.0.5-rc03.md)。
+本版在“存档 → 当前存档”增加 `.data`／`.data.new` 格式切换，快速、专家模式分别编辑选中的分片；新格式保留读取开关，还原时也可选择开关处理方式。沿用正式签名，可直接覆盖更新。具体变动见[发布说明](docs/releases/2.0.5-rc04.md)。
 
 **修改前请先备份原始存档，并保存到助手以外的文件夹。** 从旧 alpha / Debug 包升级时，请先阅读[备份与更新](docs/help/backup-and-update.md)，避免签名不同导致无法覆盖安装。
 
@@ -51,7 +51,7 @@
 以下为快速 / 专家模式的基本流程，自由编辑请按[图文教程](docs/help/getting-started.md#free-editing)操作。请先保存并彻底退出所选游戏，操作期间保持游戏关闭。
 
 1. **安装并授权**：安装 APK，首次使用可先进入快速模式，在 Root 管理器中为助手授权。
-2. **读取存档**：在“存档”页选择游戏版本，点“读取存档”；检测到多个账号时，选择要操作的账号。
+2. **读取存档**：在“存档”页选择游戏版本，点“读取存档”；检测到多个账号时，选择要操作的账号，再在“当前存档”中确认 `.data` 或 `.data.new` 格式。
 3. **保存备份**：进入“设置 → 备份与恢复”，选择助手以外的文件夹，点“备份当前本地存档”。
 4. **设置并预览**：在角色、物品或武器页选择修改，点“预览全部待修改内容”，核对原值、新值和目标账号。
 5. **应用并核对**：确认后点“备份并应用”，查看结果，再进入游戏检查实际效果；遇到错误或恢复提示时，先按提示处理。
@@ -90,7 +90,7 @@
 | 备份、还原与安装更新 | [备份与更新](docs/help/backup-and-update.md) |
 | 自由编辑文件 | [自由编辑](docs/help/free-editing.md) · [图文教程](docs/help/getting-started.md#free-editing) |
 | 游戏版本与存档读取 | [版本选择](docs/help/game-versions.md) · [本地读取](docs/help/local-data-reading.md) |
-| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc03.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
+| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc04.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
 | 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) |
 | Python 桌面版 | [使用说明](desktop/README.md)，功能与 Android 版分别维护 |
 

@@ -71,14 +71,29 @@ object EditEngine {
         requireNotNull(item(snapshot, account)) { "没有与此账号对应的物品存档" }.bytes)
     fun hasCharacters(selection: UnlockSelection) = selection.heroes.isNotEmpty() || selection.skins.isNotEmpty() || selection.hasProgress || selection.pets || selection.petIds.isNotEmpty()
 
-    fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: Boolean = false): SavePlan {
-        return preview(snapshot, account, characters, items, WeaponSelection(allPlusEight = weapons))
+    fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: Boolean = false,
+        dataMode: SaveDataMode? = null): SavePlan {
+        return preview(snapshot, account, characters, items, WeaponSelection(allPlusEight = weapons), dataMode = dataMode)
     }
     fun preview(snapshot: SaveSnapshot, account: String, characters: UnlockSelection, items: ItemSelection, weapons: WeaponSelection,
         weaponSkins: WeaponSkinSelection = WeaponSkinSelection(),
         evolution: WeaponEvolutionSelection = WeaponEvolutionSelection(), mythic: MythicSelection = MythicSelection(),
-        relockScope: RelockScope? = null, relockOriginals: List<RelockOriginal> = emptyList()): SavePlan {
+        relockScope: RelockScope? = null, relockOriginals: List<RelockOriginal> = emptyList(),
+        dataMode: SaveDataMode? = null): SavePlan {
         require(account in accounts(snapshot)) { "账号不在扫描结果中" }
+        val selectedSnapshot = dataMode?.select(snapshot) ?: snapshot
+        if (dataMode != null) {
+            fun needItem() = require(selectedSnapshot.items.any { itemAccount(it.path) == account }) {
+                "未发现 ${dataMode.extension} 物品存档，请切换格式或重新读取"
+            }
+            if (items.hasChanges || mythic.hasChanges || weapons.hasChanges || weaponSkins.hasChanges || evolution.hasChanges) needItem()
+            if (weapons.hasChanges) require(selectedSnapshot.statistics.any { statisticAccount(it.path) == account }) {
+                "未发现 ${dataMode.extension} 统计存档，请切换格式或重新读取"
+            }
+            if (weaponSkins.hasChanges || evolution.hasChanges) require(selectedSnapshot.weaponSkins.any { weaponSkinAccount(it.path) == account }) {
+                "未发现 ${dataMode.extension} 武器进化存档，请切换格式或重新读取"
+            }
+        }
         if (characters.relock) require(!characters.levels && characters.levelHeroes.isEmpty() && !characters.pets && characters.petIds.isEmpty()) {
             "重新锁定仅处理角色、皮肤和技能；等级与宠物不参与此操作"
         }
@@ -86,33 +101,33 @@ object EditEngine {
         val outputs = linkedMapOf<String, ByteArray>()
         val changes = mutableListOf<String>()
         val sections = linkedMapOf<String, List<String>>()
-        val preserveReadingFlags = hasModernSource(snapshot, account)
+        val preserveReadingFlags = dataMode?.preserveReadingFlags ?: hasModernSource(selectedSnapshot, account)
         if (hasCharacters(characters)) {
-            val prefs = requireNotNull(snapshot.prefs) { "没有可识别的角色 XML" }
+            val prefs = requireNotNull(selectedSnapshot.prefs) { "没有可识别的角色 XML" }
             if (characters.heroes.isNotEmpty() || characters.skins.isNotEmpty() || characters.hasProgress) {
                 val patch = if (characters.relock) {
                     val scope = requireNotNull(relockScope) { "请重新读取存档以核对重新锁定来源" }
-                    require(scope.packageName == snapshot.packageName && scope.user == snapshot.user) { "重新锁定来源与当前游戏不一致" }
-                    RelockEngine.patch(snapshot.game?.bytes, prefs.bytes, account, scope, relockOriginals, characters,
+                    require(scope.packageName == selectedSnapshot.packageName && scope.user == selectedSnapshot.user) { "重新锁定来源与当前游戏不一致" }
+                    RelockEngine.patch(selectedSnapshot.game?.bytes, prefs.bytes, account, scope, relockOriginals, characters,
                         preserveReadingFlags = preserveReadingFlags)
-                } else UnlockEngine.unlock(snapshot.game?.bytes, prefs.bytes, account, characters,
+                } else UnlockEngine.unlock(selectedSnapshot.game?.bytes, prefs.bytes, account, characters,
                     preserveReadingFlags = preserveReadingFlags)
                 outputs[prefs.path] = patch.prefs
-                snapshot.game?.let { outputs[it.path] = requireNotNull(patch.game) }
+                selectedSnapshot.game?.let { outputs[it.path] = requireNotNull(patch.game) }
                 changes += patch.changes
             }
             if (characters.pets || characters.petIds.isNotEmpty()) {
-                val patch = PetEngine.unlock(snapshot.game?.let { outputs[it.path] ?: it.bytes }, outputs[prefs.path] ?: prefs.bytes, account, if (characters.pets) null else characters.petIds,
+                val patch = PetEngine.unlock(selectedSnapshot.game?.let { outputs[it.path] ?: it.bytes }, outputs[prefs.path] ?: prefs.bytes, account, if (characters.pets) null else characters.petIds,
                     preserveReadingFlags = preserveReadingFlags)
                 outputs[prefs.path] = patch.prefs
-                snapshot.game?.let { outputs[it.path] = requireNotNull(patch.game) }
+                selectedSnapshot.game?.let { outputs[it.path] = requireNotNull(patch.game) }
                 changes += patch.changes
             }
         }
         sections["角色"] = changes.toList()
         val itemStart = changes.size
         if (items.hasChanges) {
-            val file = requireNotNull(item(snapshot, account)) { "没有与所选账号对应的物品存档" }
+            val file = requireNotNull(item(selectedSnapshot, account)) { "没有与所选账号对应的物品存档" }
             val patch = ItemEngine.edit(file.bytes, items)
             outputs[file.path] = patch.bytes
             changes += patch.changes
@@ -120,14 +135,14 @@ object EditEngine {
         sections["物品"] = changes.drop(itemStart)
         val mythicStart = changes.size
         if (mythic.hasChanges) {
-            val file = requireNotNull(item(snapshot, account)) { "没有与所选账号对应的物品存档" }
+            val file = requireNotNull(item(selectedSnapshot, account)) { "没有与所选账号对应的物品存档" }
             val patch = MythicEngine.edit(outputs[file.path] ?: file.bytes, mythic)
             outputs[file.path] = patch.bytes
             changes += patch.changes
         }
         sections["神话武器"] = changes.drop(mythicStart)
         if (items.hasChanges || mythic.hasChanges) {
-            val file = requireNotNull(item(snapshot, account))
+            val file = requireNotNull(item(selectedSnapshot, account))
             val itemRoot = ItemCodec.decode(outputs[file.path] ?: file.bytes)
             // Apply increments once against the preferred shard. Existing companion encodings
             // receive the resulting amounts, rather than adding to their possibly stale counts.
@@ -139,7 +154,7 @@ object EditEngine {
                 if (mythic.hasChanges) result = MythicEngine.edit(result, mythic).bytes
                 return result
             }
-            snapshot.items.filter { itemAccount(it.path) == account && it.path != file.path }.forEach { companion ->
+            selectedSnapshot.items.filter { itemAccount(it.path) == account && it.path != file.path }.forEach { companion ->
                 val updated = patchCompanion(companion.bytes)
                 if (!updated.contentEquals(companion.bytes)) {
                     outputs[companion.path] = updated
@@ -149,7 +164,7 @@ object EditEngine {
                     sections[section] = sections[section].orEmpty() + sync
                 }
             }
-            snapshot.game?.let { game ->
+            selectedSnapshot.game?.let { game ->
                 // itemData is optional. Parsing this object does not require legacy role/skin structures.
                 val root = Json.parseToJsonElement(UnlockEngine.utf8(UnlockEngine.xor(outputs[game.path] ?: game.bytes))).jsonObject
                 if ("itemData" in root) {
@@ -171,15 +186,15 @@ object EditEngine {
         }
         val weaponStart = changes.size
         if (weapons.hasChanges) {
-            val file = requireNotNull(statistic(snapshot, account)) { "没有与所选账号对应的统计存档" }
-            val item = requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器目录版本" }
+            val file = requireNotNull(statistic(selectedSnapshot, account)) { "没有与所选账号对应的统计存档" }
+            val item = requireNotNull(item(selectedSnapshot, account)) { "需要同账号的物品分片核对武器目录版本" }
             val patch = WeaponEngine.edit(file.bytes, item.bytes, weapons)
             outputs[file.path] = patch.bytes
             changes += patch.changes
             val resultingCounters = patch.root.getValue("object2ObtainTime").jsonObject
             val selected = if (weapons.allPlusEight) resultingCounters.keys.filter(WeaponCatalog::isWeaponId).toSet()
                 else weapons.increments.filterValues { it > 0 }.keys
-            snapshot.statistics.filter { statisticAccount(it.path) == account && it.path != file.path }.forEach { companion ->
+            selectedSnapshot.statistics.filter { statisticAccount(it.path) == account && it.path != file.path }.forEach { companion ->
                 val root = WeaponEngine.inspect(companion.bytes, item.bytes)
                 val counts = root.getValue("object2ObtainTime").jsonObject.toMutableMap()
                 selected.forEach { id ->
@@ -199,8 +214,8 @@ object EditEngine {
         sections["武器"] = changes.drop(weaponStart)
         val skinStart = changes.size
         if (weaponSkins.hasChanges) {
-            val file = requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器皮肤分片" }
-            val item = requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器皮肤目录版本" }
+            val file = requireNotNull(weaponSkinFile(selectedSnapshot, account)) { "没有与此账号对应的武器皮肤分片" }
+            val item = requireNotNull(item(selectedSnapshot, account)) { "需要同账号的物品分片核对武器皮肤目录版本" }
             val patch = WeaponSkinEngine.edit(file.bytes, item.bytes, weaponSkins)
             outputs[file.path] = patch.bytes
             changes += patch.changes
@@ -209,7 +224,7 @@ object EditEngine {
                 if (index == 0) null else definitions.single { it.weapon == weapon && it.index == index }.id
             }
             val companionSelection = weaponSkins.copy(unlock = weaponSkins.unlock + requiredSkins)
-            snapshot.weaponSkins.filter { weaponSkinAccount(it.path) == account && it.path != file.path }.forEach { companion ->
+            selectedSnapshot.weaponSkins.filter { weaponSkinAccount(it.path) == account && it.path != file.path }.forEach { companion ->
                 // A current-only selection may already be owned in the modern shard but absent
                 // from the stale legacy shard. Carry its verified unlock dependency as well.
                 val updated = WeaponSkinEngine.edit(companion.bytes, item.bytes, companionSelection)
@@ -220,25 +235,25 @@ object EditEngine {
         sections["武器皮肤"] = changes.drop(skinStart)
         val evolutionStart = changes.size
         if (evolution.hasChanges) {
-            val file = requireNotNull(weaponSkinFile(snapshot, account)) { "没有与此账号对应的武器进化分片" }
-            val item = requireNotNull(item(snapshot, account)) { "需要同账号的物品分片核对武器进化目录版本" }
+            val file = requireNotNull(weaponSkinFile(selectedSnapshot, account)) { "没有与此账号对应的武器进化分片" }
+            val item = requireNotNull(item(selectedSnapshot, account)) { "需要同账号的物品分片核对武器进化目录版本" }
             val patch = WeaponEvolutionEngine.edit(outputs[file.path] ?: file.bytes, item.bytes, evolution)
             outputs[file.path] = patch.bytes
             changes += patch.changes
-            snapshot.weaponSkins.filter { weaponSkinAccount(it.path) == account && it.path != file.path }.forEach { companion ->
+            selectedSnapshot.weaponSkins.filter { weaponSkinAccount(it.path) == account && it.path != file.path }.forEach { companion ->
                 val updated = WeaponEvolutionEngine.edit(outputs[companion.path] ?: companion.bytes, item.bytes, evolution)
                 outputs[companion.path] = updated.bytes
                 if (!updated.bytes.contentEquals(companion.bytes)) changes += "同步同账号武器进化分片：${companion.path.substringAfterLast('/')}"
             }
         }
         sections["武器进化"] = changes.drop(evolutionStart)
-        if (!preserveReadingFlags && (hasCharacters(characters) || items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges || evolution.hasChanges || mythic.hasChanges)) snapshot.prefs?.let { prefs ->
+        if (!preserveReadingFlags && (hasCharacters(characters) || items.hasChanges || weapons.hasChanges || weaponSkins.hasChanges || evolution.hasChanges || mythic.hasChanges)) selectedSnapshot.prefs?.let { prefs ->
             val current = outputs[prefs.path] ?: prefs.bytes
             val (bytes, flags) = UnlockEngine.localReadingFlags(current, account)
             if (!bytes.contentEquals(current)) outputs[prefs.path] = bytes
             changes += flags
             sections["读取来源"] = flags
         }
-        return SavePlan(outputs.filter { (path, bytes) -> !snapshot.files.single { it.path == path }.bytes.contentEquals(bytes) }, changes, sections.filterValues { it.isNotEmpty() })
+        return SavePlan(outputs.filter { (path, bytes) -> !selectedSnapshot.files.single { it.path == path }.bytes.contentEquals(bytes) }, changes, sections.filterValues { it.isNotEmpty() })
     }
 }

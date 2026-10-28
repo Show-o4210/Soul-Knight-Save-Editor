@@ -23,6 +23,24 @@ class RijndaelCodecTest {
         assertArrayEquals(alignedBytes, RijndaelCodec.encode(aligned))
     }
 
+    @Test fun alignedJsonAcceptsAFullZeroBlockAndNoOpKeepsItsOriginalCiphertext() {
+        val root = Json.parseToJsonElement("""{"a":1234567}""").jsonObject
+        // Independent AES vector: the same aligned BOM + JSON, followed by exactly 16 zeroes.
+        val padded = Base64.decode("XyLcedMd4zsj+AP/ia5ObcBSJUQkUXhcqhdRg2QpIb8=")
+        assertEquals(root, RijndaelCodec.decode(padded))
+        assertEquals(root, ItemCodec.decode(padded))
+        assertEquals(root, StatisticCodec.decode(padded))
+        assertSame(padded, ItemCodec.encode(root, padded))
+        assertSame(padded, StatisticCodec.encode(root, padded))
+        val changed = JsonObject(root + ("a" to JsonPrimitive(7654321)))
+        for (bytes in listOf(ItemCodec.encode(changed, padded), StatisticCodec.encode(changed, padded))) {
+            assertEquals(changed, RijndaelCodec.decode(bytes))
+            assertEquals(16, bytes.size) // Keep the native writer's zero-padding convention.
+        }
+        val twoBlocks = Base64.decode("XyLcedMd4zsj+AP/ia5ObcBSJUQkUXhcqhdRg2QpIb9rM9Do7KYTYWVC1jF5RCMp")
+        assertThrows(IllegalArgumentException::class.java) { RijndaelCodec.decode(twoBlocks) }
+    }
+
     @Test fun bothShardCodecsRecognizeNativeCiphertextAndPreserveItsFormatOnEdit() {
         assertEquals(fixtureRoot, ItemCodec.decode(fixture))
         assertEquals(fixtureRoot, StatisticCodec.decode(fixture))
@@ -144,6 +162,31 @@ class RijndaelCodecTest {
         val weapon = ItemCodec.decode(weaponBytes)
         assertTrue(weapon["weapons"] is JsonObject)
         assertSame(weaponBytes, ItemCodec.encode(weapon, weaponBytes))
+        originals.forEach { (path, original) -> assertArrayEquals(original, path.readBytes()) }
+    }
+
+    @Test fun externalSamplesUseTheSameCodecWithoutAssumingChannelOrGameVersion() {
+        val folder = System.getenv("RIJNDAEL_SAMPLE_DIR")?.let(::File)
+        assumeTrue("Optional private AES samples", folder?.isDirectory == true)
+        val paths = requireNotNull(folder).listFiles().orEmpty()
+            .filter { it.isFile && it.name.endsWith(".data.new") }
+        assumeTrue("At least one private AES sample", paths.isNotEmpty())
+        val originals = paths.associateWith(File::readBytes)
+        originals.forEach { (_, bytes) ->
+            val root = RijndaelCodec.decode(bytes)
+            assertEquals(root, ItemCodec.decode(bytes))
+            assertEquals(root, StatisticCodec.decode(bytes))
+            assertSame(bytes, ItemCodec.encode(root, bytes))
+            assertSame(bytes, StatisticCodec.encode(root, bytes))
+            val marker = "__codec_roundtrip_test__"
+            require(marker !in root)
+            val edited = JsonObject(root + (marker to JsonPrimitive("测试")))
+            for (output in listOf(ItemCodec.encode(edited, bytes), StatisticCodec.encode(edited, bytes))) {
+                val decoded = RijndaelCodec.decode(output)
+                assertEquals(edited, decoded)
+                assertEquals(root, JsonObject(decoded - marker))
+            }
+        }
         originals.forEach { (path, original) -> assertArrayEquals(original, path.readBytes()) }
     }
 }

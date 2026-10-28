@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
             Text(state.freeFolder?.let { BackupDestination.label(Uri.parse(it)) } ?: "请选择一个供外部应用编辑的本地目录。")
             OutlinedButton(chooseFolder, enabled = !state.busy) { Text(if (state.freeFolder == null) "选择导出目录" else "更换导出目录") }
             Text("每次导出创建独立子目录，随后弹出应用选择器。可选择文件管理器或逐文件选择编辑应用。", style = MaterialTheme.typography.bodySmall)
-            Text("XML 默认勾选，按原文导出为 .xml；导入后写回原配置文件。仅检查 XML 格式，已有本地读取开关会设为 0。", style = MaterialTheme.typography.bodySmall)
+            Text("XML 默认勾选，按原文导出并写回原配置文件。来源含 .data.new 时保留读取模式；显式修改 XML 开关时按修改值写回。仅旧格式来源将已有读取开关设为 0。", style = MaterialTheme.typography.bodySmall)
             if (state.freeAccounts.size > 1) {
                 Text("无账号文件名的分片，使用以下账号的本地读取开关：", style = MaterialTheme.typography.bodySmall)
                 state.freeAccounts.forEach { account ->

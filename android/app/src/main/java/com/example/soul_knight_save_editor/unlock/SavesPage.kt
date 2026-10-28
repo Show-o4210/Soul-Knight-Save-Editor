@@ -87,6 +87,19 @@ import androidx.compose.ui.unit.dp
                 }
             }
             state.catalog?.let { catalog ->
+                Text("存档格式", fontWeight = FontWeight.SemiBold)
+                SaveDataModePicker(state.dataMode, !state.busy && state.pending.isEmpty(), model::dataMode)
+                Text(state.dataMode?.let { if (it == SaveDataMode.MODERN)
+                    "仅编辑新格式分片，保留两个读取开关。" else "仅编辑旧格式分片，已有读取开关设为 0。" }
+                    ?: "请选择本次编辑的格式。", style = MaterialTheme.typography.bodySmall)
+                val detected = SaveDataMode.detected(snapshot, catalog.account)
+                Text("游戏读取配置：${detected?.let { "${it.label} ${it.extension}" } ?: "未能确认"}",
+                    style = MaterialTheme.typography.labelSmall)
+                if (detected != null && state.dataMode != null && detected != state.dataMode)
+                    Text("本次编辑格式与游戏读取配置不同。选择格式不会自动切换游戏的读取方式。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+            state.catalog?.let { catalog ->
                 Text("${catalog.heroes.size} 个角色 · ${catalog.heroes.sumOf { it.skins.size }} 个皮肤", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ model.tab(WorkspaceTabs.characters) }, enabled = !state.busy) { Text("角色功能") }
@@ -115,5 +128,18 @@ import androidx.compose.ui.unit.dp
                 Text(if (selected) "当前已选版本" else "选择这个版本")
             }
         } }
+    }
+}
+
+@Composable internal fun SaveDataModePicker(selected: SaveDataMode?, enabled: Boolean, onSelect: (SaveDataMode) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SaveDataMode.entries.forEach { mode ->
+            FilterChip(selected = selected == mode, onClick = { onSelect(mode) }, enabled = enabled,
+                label = { Column {
+                    Text(mode.label)
+                    Text(mode.extension, style = MaterialTheme.typography.labelMedium)
+                } },
+                modifier = Modifier.weight(1f).testTag("save-data-mode-${mode.name.lowercase()}"))
+        }
     }
 }

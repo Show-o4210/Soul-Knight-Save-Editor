@@ -236,16 +236,17 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
     }
 
     /** User-selected restore is a NEW transaction; crash recovery still performs an exact rollback. */
-    @Synchronized fun restore(id: String) {
+    @Synchronized fun restore(id: String, dataMode: SaveDataMode = SaveDataMode.LEGACY) {
         require(pending().isEmpty()) { "请先恢复未完成事务" }
         val record = folder(id)
         require(stateOf(record) in setOf("complete", "rolled_back", "restored")) { "请先恢复未完成事务" }
         val payload = originals(id)
         val prefsPath = manifest(record)["prefsPath"]?.jsonPrimitive?.content
-        restore(payload, prefsPath)
+        restore(payload, prefsPath, dataMode)
     }
 
-    @Synchronized fun restore(payload: BackupPayload, fallbackPrefsPath: String? = null) {
+    @Synchronized fun restore(payload: BackupPayload, fallbackPrefsPath: String? = null,
+        dataMode: SaveDataMode = SaveDataMode.LEGACY) {
         require(pending().isEmpty()) { "请先恢复未完成事务" }
         BackupArchive.validate(payload)
         val fallback = fallbackPrefsPath?.takeIf { path -> payload.files.none { it.path.contains("/shared_prefs/") } }
@@ -259,10 +260,11 @@ class SaveRepository(private val directory: File, private val device: DeviceStor
         val shardAccounts = payload.files.mapNotNull { EditEngine.itemAccount(it.path) ?: EditEngine.statisticAccount(it.path) ?: EditEngine.weaponSkinAccount(it.path) }.distinct()
         val proposed = files.associate { source ->
             var bytes = source.bytes
-            if (source.path.contains("/shared_prefs/")) {
+            if (dataMode == SaveDataMode.LEGACY && source.path.contains("/shared_prefs/")) {
                 val nodes = UnlockEngine.prefs(bytes)
                 // The whole backed-up XML is restored. A fallback XML, however, is current data:
                 // bind restored file accounts to their explicit Chilly UID before touching it.
+                // Modern restores retain backup bytes (or untouched current fallback bytes).
                 bytes = if (source.path == fallback) {
                     shardAccounts.fold(bytes) { currentXml, account -> UnlockEngine.localReadingFlags(currentXml, account).first }
                 } else UnlockEngine.localReadingFlagScopes(bytes, ReadingFlagScope.rawScopes(nodes)).first
