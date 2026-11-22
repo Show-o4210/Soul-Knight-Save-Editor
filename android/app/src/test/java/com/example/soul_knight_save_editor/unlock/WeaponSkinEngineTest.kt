@@ -32,7 +32,8 @@ class WeaponSkinEngineTest {
         for (id in listOf("weapon_405_s_1", "weapon_415_s_1", "weapon_358_s_1"))
             assertFalse(WeaponSkinCatalog.entries.any { it.id == id })
         assertFalse(WeaponSkinCatalog.forVersion(80600).any { it.id == "weapon_378_s_1" })
-        assertThrows(IllegalArgumentException::class.java) { WeaponSkinCatalog.forVersion(80800) }
+        assertEquals(WeaponSkinCatalog.forVersion(80700), WeaponSkinCatalog.forVersion(80800))
+        assertThrows(IllegalArgumentException::class.java) { WeaponSkinCatalog.forVersion(80900) }
     }
     @Test fun unlockPreservesCurrentEvolutionUnknownFieldsAndOtherRecords() {
         val source = bytes()

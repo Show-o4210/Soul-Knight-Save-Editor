@@ -1,5 +1,6 @@
 package com.example.soul_knight_save_editor.unlock
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -8,6 +9,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -30,6 +32,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
@@ -41,7 +44,6 @@ import com.example.soul_knight_save_editor.R
     val logo by animateDpAsState(if (compact) 24.dp else if (mode != null) 32.dp else 44.dp, label = "header-logo")
     val font by animateFloatAsState(if (compact) 16f else if (mode != null) 18f else 22f, label = "header-title")
     val modeText = mode?.label.orEmpty()
-    val context = LocalContext.current
     Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
     Surface(onClick = onTitleClick, modifier = Modifier.weight(1f).height(height).testTag("app-header"),
@@ -49,8 +51,9 @@ import com.example.soul_knight_save_editor.R
         color = MaterialTheme.colorScheme.surface.copy(alpha = .65f), contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))) {
         Row(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(Modifier.size(logo), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primary.copy(alpha = .85f), contentColor = MaterialTheme.colorScheme.onPrimary) {
-                Box(contentAlignment = Alignment.Center) { Text("SK", fontSize = if (compact) 10.sp else 16.sp, fontWeight = FontWeight.Bold) }
+            Surface(Modifier.size(logo), shape = RoundedCornerShape(if (compact) 7.dp else 12.dp), color = Color(0xFFE4EEDC)) {
+                Image(painterResource(R.drawable.ic_showcheer), contentDescription = null,
+                    modifier = Modifier.fillMaxSize().padding(if (compact) 2.dp else 3.dp))
             }
             Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -68,19 +71,47 @@ import com.example.soul_knight_save_editor.R
             }
         }
     }
-    FilledTonalButton(onClick = {
-        try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://qm.qq.com/q/9Sg9mdgarY")))
-        } catch (_: android.content.ActivityNotFoundException) {
-            Toast.makeText(context, "无法打开群聊链接，请安装 QQ 或浏览器后重试。", Toast.LENGTH_LONG).show()
-        }
-    }, enabled = !busy, modifier = Modifier.width(76.dp).height(height).testTag("join-us"),
-        shape = RoundedCornerShape(if (compact) 20.dp else 24.dp), contentPadding = PaddingValues(4.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Icon(painterResource(R.drawable.ic_group), contentDescription = null, modifier = Modifier.size(if (compact) 16.dp else 20.dp))
-            Text("加入我们", fontSize = 12.sp, maxLines = 1)
-        }
+    CommunityMenu(busy, compact, height)
     }
+}
+
+private data class CommunityLink(val label: String, val url: String, val icon: Int)
+
+private val communityLinks = listOf(
+    CommunityLink("GitHub 仓库", "https://github.com/Show-o4210/Soul-Knight-Save-Editor", R.drawable.ic_code),
+    CommunityLink("QQ 交流群", "https://qm.qq.com/q/9Sg9mdgarY", R.drawable.ic_group),
+    CommunityLink("赞助项目", "https://showcheer.top/sponsor/", R.drawable.ic_heart_outline)
+)
+
+@Composable private fun CommunityMenu(busy: Boolean, compact: Boolean, height: Dp) {
+    val context = LocalContext.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        FilledTonalButton(onClick = { expanded = true }, enabled = !busy,
+            modifier = Modifier.width(76.dp).height(height).testTag("join-us"),
+            shape = RoundedCornerShape(if (compact) 20.dp else 24.dp), contentPadding = PaddingValues(4.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Icon(painterResource(R.drawable.ic_group), contentDescription = null, modifier = Modifier.size(if (compact) 16.dp else 20.dp))
+                Text("加入我们", fontSize = 12.sp, maxLines = 1)
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            communityLinks.forEach { link ->
+                DropdownMenuItem(
+                    text = { Text(link.label) },
+                    leadingIcon = { Icon(painterResource(link.icon), contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    enabled = !busy,
+                    onClick = {
+                        expanded = false
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url)))
+                        } catch (_: ActivityNotFoundException) {
+                            Toast.makeText(context, "无法打开链接，请安装浏览器后重试。", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                )
+            }
+        }
     }
 }
 

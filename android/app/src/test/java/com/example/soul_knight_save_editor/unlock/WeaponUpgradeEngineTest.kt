@@ -26,11 +26,13 @@ class WeaponUpgradeEngineTest {
     @Test fun reviewedCatalogsBindVersionsAndOneEvolutionIsTheMaximum() {
         assertEquals(118, WeaponEvolutionCatalog.forVersion(80600).size)
         assertEquals(121, WeaponEvolutionCatalog.forVersion(80700).size)
+        assertEquals(WeaponEvolutionCatalog.forVersion(80700), WeaponEvolutionCatalog.forVersion(80800))
         assertEquals(121, WeaponEvolutionCatalog.entries.map { it.id }.toSet().size)
         assertTrue(WeaponEvolutionCatalog.entries.all { it.maxLevel == 1 })
         assertEquals(setOf("weapon_018", "weapon_388", "weapon_378"), WeaponEvolutionCatalog.entries.filter { it.minVersion == 80700 }.map { it.id }.toSet())
         assertEquals((0..27).toList(), MythicCatalog.forVersion(80700).map { it.id })
         assertEquals(MythicCatalog.forVersion(80600), MythicCatalog.forVersion(80700))
+        assertEquals(MythicCatalog.forVersion(80700), MythicCatalog.forVersion(80800))
         assertEquals("三尖两刃刀", MythicCatalog.entries.first().label)
         assertEquals("weapon_mythic_00", MythicCatalog.entries.first().weapon)
         assertTrue(MythicCatalog.entries.all { it.maxLevel == 3 })

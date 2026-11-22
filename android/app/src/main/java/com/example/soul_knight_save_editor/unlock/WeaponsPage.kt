@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
     var selectedOnly by rememberSaveable { mutableStateOf(false) }
     var batch by rememberSaveable(state.packageName, state.catalog?.account) { mutableStateOf("") }
     val choices = state.expertWeapons
+    val future = state.itemRoot?.let(ItemEngine::isFuture) == true
     val visible = state.weaponStates.filter { (it.id.contains(query, true) || WeaponCatalog.names[it.id].orEmpty().contains(query, true)) &&
         (!selectedOnly || it.id in choices.marked || !choices.incrementText[it.id].isNullOrBlank()) }
     Column(modifier) {
@@ -84,7 +85,8 @@ import androidx.compose.ui.unit.dp
             } }
             if (state.catalog != null && mode == AssistantMode.QUICK) item { Panel(title = "获取次数", help = HelpTopics.weapons) {
                 Text(state.weaponMessage, style = MaterialTheme.typography.bodySmall)
-                CheckLine("全部武器获取次数 +8", state.choices.weapons(mode), !state.busy && state.weaponInfo != null, onSelect)
+                CheckLine(if (future) "已识别武器获取次数 +8" else "全部武器获取次数 +8", state.choices.weapons(mode),
+                    !state.busy && (state.weaponInfo?.total ?: 0) > 0, onSelect)
                 if (!state.personalUseAccepted) TextButton(onConsent) { Text("先确认个人使用约定") }
             } }
             if (state.catalog != null && mode == AssistantMode.EXPERT) {

@@ -21,10 +21,10 @@ class WeaponUpgradeIntegrationTest {
             files[file.path] = file.copy(bytes = bytes.copyOf())
         }
     }
-    private fun snapshot(device: Memory, mirror: Boolean = true): SaveSnapshot {
+    private fun snapshot(device: Memory, mirror: Boolean = true, version: Int = 80700): SaveSnapshot {
         fun file(path: String, bytes: ByteArray) = SaveFile("$root/$path", bytes, "1000:1000", "600", "u:object_r:app_data_file:s0")
         val prefs = file("shared_prefs/prefs.xml", """<map><string name="42_c0_unlock">false</string><int name="OpenRijTest_42" value="1"/><int name="OpenNewtonJsonTest_42" value="1"/></map>""".toByteArray())
-        val itemRoot = Json.parseToJsonElement("""{"AppVersion":80700,"materials":{"material_cell":2},"mythicWeapons":[{"id":0,"level":-1,"keep":7},{"id":999,"level":8}],"unknown":{"keep":true}}""").jsonObject
+        val itemRoot = Json.parseToJsonElement("""{"AppVersion":$version,"materials":{"material_cell":2},"mythicWeapons":[{"id":0,"level":-1,"keep":7},{"id":999,"level":8}],"unknown":{"keep":true}}""").jsonObject
         val gameRoot = buildJsonObject {
             put("heroUnlock", buildJsonObject { put("Knight", false) })
             put("skinLock", buildJsonObject { put("Knight", JsonArray(emptyList())) })
@@ -46,11 +46,12 @@ class WeaponUpgradeIntegrationTest {
         WeaponEvolutionSelection(levels = mapOf("weapon_007" to 1)), MythicSelection(levels = mapOf(0 to 3)))
 
     @Test fun composingItemsMythicsSkinsEvolutionAndCharactersPreservesEveryPatch() {
-        val snapshot = snapshot(Memory("native-root"))
+        val snapshot = snapshot(Memory("native-root"), version = 80800)
         val plan = combined(snapshot)
         assertEquals(5, plan.outputs.size)
         assertEquals(setOf("角色", "物品", "神话武器", "武器", "武器皮肤", "武器进化"), plan.sections.keys)
         val item = ItemCodec.decode(plan.outputs.getValue(snapshot.items.single().path))
+        assertEquals(JsonPrimitive(80800), item["AppVersion"])
         assertEquals(9, item.getValue("materials").jsonObject.getValue("material_cell").jsonPrimitive.int)
         assertEquals(JsonPrimitive("Researched"), item.getValue("blueprints").jsonObject["blueprint_weapon_boss_void_origin"])
         val mythics = item.getValue("mythicWeapons").jsonArray

@@ -42,7 +42,7 @@ class WeaponEngineTest {
         val named = mapOf("weapon_hammerhead" to "锤头鲨", "weapon_lighter" to "遗迹火焰法杖", "weapon_void_hand" to "手骨回旋镖")
         assertEquals(419, WeaponCatalog.names.size)
         named.forEach { (id, name) -> assertEquals(name, WeaponCatalog.names[id]) }
-        for (version in listOf(80600, 80700)) {
+        for (version in listOf(80600, 80700, 80800)) {
             val paired = ItemCodec.encode(buildJsonObject { put("AppVersion", version) })
             val bytes = encoded(buildJsonObject { put("weapon_hammerhead", 20) })
             val quick = WeaponEngine.addEight(bytes, paired)
@@ -70,9 +70,9 @@ class WeaponEngineTest {
         val max = WeaponEngine.addEight(encoded(buildJsonObject { put("weapon_361", Int.MAX_VALUE - 8) }), item)
         assertEquals(Int.MAX_VALUE, max.root.getValue("object2ObtainTime").jsonObject.getValue("weapon_361").jsonPrimitive.int)
     }
-    @Test fun unknownGameVersionAndWrongCipherAreRejected() {
+    @Test fun invalidOrOlderUnknownVersionAndWrongCipherAreRejected() {
         val bytes = StatisticCodec.encode(original)
-        for (version in listOf(JsonPrimitive(0), JsonPrimitive(80701), JsonPrimitive(90000), JsonPrimitive("80600"), JsonPrimitive("80700"), JsonNull)) {
+        for (version in listOf(JsonPrimitive(0), JsonPrimitive(80701), JsonPrimitive(80900.5), JsonPrimitive("80900"), JsonNull)) {
             val wrong = ItemCodec.encode(buildJsonObject { put("AppVersion", version) })
             assertThrows(IllegalArgumentException::class.java) { WeaponEngine.inspect(bytes, wrong) }
         }

@@ -40,13 +40,13 @@
 
 从[官方 Releases](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases)下载 `.apk` 文件，在 Android 上安装，再为助手授权 Root。“Source code”是源码，不能直接作为 Android 安装包使用。Release 的好处是可以直接安装；需要自行构建的开发者看[构建文档](../development/README.md)。
 
-当前正式发布包是 **2.0.5-rc04 / versionCode 29**，沿用正式签名，适配元气骑士 8.7.0 并保留 8.6.0。原生 Root 默认，Shizuku Root 可选；选择 Shizuku 不会免除 Root 要求。
+当前安装包为 **2.0.5-rc05 / versionCode 30**。沿用正式签名，适配《元气骑士》8.8.0，保留 8.6.0 和 8.7.0 支持。默认使用原生 Root，也可使用 Shizuku Root。
 
 ## 更新已有安装
 
 | 原来的版本 | 更新方式 |
 | --- | --- |
-| 正式签名 2.0.0 至 2.0.5-rc03 或更早开发候选 | 可覆盖安装同包名、同正式签名且更高 versionCode 的 2.0.5-rc04 |
+| 正式签名 2.0.0 至 2.0.5-rc04 | 可覆盖安装同包名、同正式签名且 versionCode 更高的 2.0.5-rc05 |
 | 早期 alpha／Debug／2.0.2-root01 | 与正式包签名不同，不能直接覆盖；按下面步骤迁移 |
 
 迁移步骤：
@@ -58,4 +58,4 @@
 
 “签名不一致”不是游戏存档格式问题，不要因此先卸载游戏。正式发布标签 `v1` 对应 Android 2.0.0 里程碑；旧 Python `v1.0.1` 是另一客户端。[历史版本与迁移记录](../releases/2.0.0.md)保留详细信息。需要校验下载文件时，发布附件提供 `SHA256SUMS.txt` 和公开签名证书，构建与证书说明见[签名文档](../android-signing.md)。
 
-2.0.5-rc04 的格式选择和还原方式见[当前发布说明](../releases/2.0.5-rc04.md)。此前的环境记录保留在[开发状态](../development-status.md)。
+格式选择和还原方式见 [2.0.5-rc04 说明](../releases/2.0.5-rc04.md)。本版变更见[发布说明](../releases/2.0.5-rc05.md)。

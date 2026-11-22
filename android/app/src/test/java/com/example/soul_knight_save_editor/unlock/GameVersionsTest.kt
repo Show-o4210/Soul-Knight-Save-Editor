@@ -44,6 +44,16 @@ class GameVersionsTest {
         }
     }
 
+    @Test fun refreshReplacesStaleVersionsAndKeepsSavedChannels() {
+        val original = GameCandidate(GameVersions.ORIGINAL, version = "8.7.0", evidence = emptyList())
+        val savedChannel = channel()
+        val untouched = channel("com.other.soulknight")
+        val refreshed = GameVersions.refreshVersions(listOf(original, savedChannel, untouched),
+            mapOf(original.packageName to "8.8.0", savedChannel.packageName to null))
+
+        assertEquals(listOf(original.copy(version = "8.8.0"), savedChannel.copy(version = "未知版本"), untouched), refreshed)
+    }
+
     @Test fun changingTargetsKeepsTheLibraryButClearsLoadedContentAndDrafts() {
         val games = GameVersions.add(GameVersions.restore(null), channel())
         val state = AssistantState(knownGames = games, mode = AssistantMode.FREE,

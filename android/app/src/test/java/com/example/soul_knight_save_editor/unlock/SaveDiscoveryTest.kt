@@ -36,7 +36,7 @@ class SaveDiscoveryTest {
     }
     @Test fun standaloneItemDiscoveryDoesNotDependOnXmlOrSupportedEditingVersion() {
         val root = buildJsonObject {
-            put("AppVersion", 90000)
+            put("AppVersion", 80701)
             for (field in listOf("materials", "seeds", "blueprints", "tokenTickets")) put(field, JsonObject(emptyMap()))
         }
         val bytes = ItemCodec.encode(root)

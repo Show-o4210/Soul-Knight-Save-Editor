@@ -19,7 +19,8 @@ data class WeaponChoices(val incrementText: Map<String, String> = emptyMap(), va
         return WeaponSelection(increments = incrementText.filterValues { it.isNotBlank() }.mapValues { ItemChoices.parseAmount(it.value)!! }.filterValues { it > 0 })
     }
 }
-data class WeaponPatch(val bytes: ByteArray, val root: JsonObject, val changes: List<String>)
+class WeaponInventory internal constructor(val root: JsonObject, internal val ids: Set<String>, val existingOnly: Boolean)
+data class WeaponPatch(val bytes: ByteArray, val root: JsonObject, val changes: List<String>, val updatedIds: Set<String>)
 
 object StatisticCodec {
     private val key = SecretKeySpec(byteArrayOf(99, 114, 115, 116, 49, 0, 0, 0), "DES")
@@ -58,48 +59,55 @@ object WeaponEngine {
     private fun counters(root: JsonObject): JsonObject = requireNotNull(root["object2ObtainTime"] as? JsonObject) {
         "未识别到 object2ObtainTime 获取次数表，武器功能暂不可用"
     }
-    private fun ids(values: JsonObject) = (WeaponCatalog.names.keys + values.keys.filter(WeaponCatalog::isWeaponId)).toSortedSet()
     private fun count(values: JsonObject, id: String): Int {
         val value = values[id] ?: return 0
-        val number = (value as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
-        require(number != null && number >= 0) { "$id 获取次数不是非负整数，暂不修改" }
-        return number
+        return requireNotNull(value.nonNegativeInt()) { "$id 获取次数不是非负整数，暂不修改" }
     }
-    fun inspect(bytes: ByteArray, itemBytes: ByteArray): JsonObject {
-        val version = ItemCodec.decode(itemBytes)["AppVersion"] as? JsonPrimitive
-        require(version != null && !version.isString && version.intOrNull in ItemCatalog.SUPPORTED_VERSIONS) {
-            "当前武器目录适配 8.6.0 / 8.7.0；同账号物品分片的版本未核对，武器功能暂不可用"
+    fun inspect(bytes: ByteArray, itemBytes: ByteArray, restrictToExisting: Boolean = false): WeaponInventory {
+        val version = ItemEngine.version(ItemCodec.decode(itemBytes))
+        val future = ItemCatalog.isFutureVersion(version)
+        require(version in ItemCatalog.SUPPORTED_VERSIONS || future) {
+            "当前武器目录适配 ${ItemCatalog.SUPPORTED_VERSION_NAMES}；同账号物品分片的版本未核对，武器功能暂不可用"
         }
-        return StatisticCodec.decode(bytes).also { counters(it) }
-    }
-    fun states(root: JsonObject): List<WeaponState> {
+        val root = StatisticCodec.decode(bytes)
         val values = counters(root)
-        return ids(values).map { id ->
+        val existingOnly = future || restrictToExisting
+        val ids = if (existingOnly) values.keys.filter { it in WeaponCatalog.names && values[it].nonNegativeInt() != null }
+            else WeaponCatalog.names.keys + values.keys.filter(WeaponCatalog::isWeaponId)
+        return WeaponInventory(root, ids.toSortedSet(), existingOnly)
+    }
+    fun states(inventory: WeaponInventory): List<WeaponState> {
+        val values = counters(inventory.root)
+        return inventory.ids.map { id ->
             runCatching { count(values, id) }.fold({ WeaponState(id, it, id !in values) }, { WeaponState(id, null, id !in values, it.message) })
         }
     }
-    fun info(root: JsonObject): WeaponInfo {
-        val values = counters(root)
-        val ids = ids(values)
-        return WeaponInfo(ids.size, ids.count { it !in values })
+    fun info(inventory: WeaponInventory): WeaponInfo {
+        val values = counters(inventory.root)
+        return WeaponInfo(inventory.ids.size, inventory.ids.count { it !in values })
     }
     fun addEight(bytes: ByteArray, itemBytes: ByteArray): WeaponPatch = edit(bytes, itemBytes, WeaponSelection(allPlusEight = true))
     fun edit(bytes: ByteArray, itemBytes: ByteArray, selection: WeaponSelection): WeaponPatch {
         require(selection.increments.values.all { it >= 0 }) { "武器仅支持非负增量" }
         require(!selection.allPlusEight || selection.increments.isEmpty()) { "不能混用全量与逐项武器增量" }
-        val original = inspect(bytes, itemBytes)
-        val values = counters(original).toMutableMap()
-        val allowed = ids(counters(original))
-        require(selection.increments.keys.all { it in allowed }) { "不能新增未确认的武器 ID" }
+        val inventory = inspect(bytes, itemBytes)
+        val original = inventory.root
+        val originalCounters = counters(original)
+        val values = originalCounters.toMutableMap()
+        val allowed = inventory.ids
+        require(selection.increments.keys.all { it in allowed }) {
+            if (inventory.existingOnly) "新版存档中的所选武器缺少已知有效的获取次数记录，暂不修改" else "不能新增未确认的武器 ID"
+        }
+        require(!selection.allPlusEight || allowed.isNotEmpty()) { "没有可修改的武器获取次数记录" }
         val increments = if (selection.allPlusEight) allowed.associateWith { 8 } else selection.increments.filterValues { it > 0 }
         val changes = increments.toSortedMap().map { (id, delta) ->
-            val old = count(counters(original), id)
+            val old = count(originalCounters, id)
             val next = old.toLong() + delta
             require(next <= Int.MAX_VALUE) { "$id 增量会超出整数范围" }
             values[id] = JsonPrimitive(next.toInt())
-            "${WeaponCatalog.names[id] ?: id} [$id]：$old → $next" + if (id !in counters(original)) "（新增获取记录）" else ""
+            "${WeaponCatalog.names[id] ?: id} [$id]：$old → $next" + if (id !in originalCounters) "（新增获取记录）" else ""
         }
         val root = JsonObject(original + ("object2ObtainTime" to JsonObject(values)))
-        return WeaponPatch(if (root == original) bytes else StatisticCodec.encode(root, bytes), root, changes)
+        return WeaponPatch(if (root == original) bytes else StatisticCodec.encode(root, bytes), root, changes, increments.keys)
     }
 }

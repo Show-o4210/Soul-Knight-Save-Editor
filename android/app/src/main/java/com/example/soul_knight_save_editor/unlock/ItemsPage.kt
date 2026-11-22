@@ -36,7 +36,12 @@ private fun itemValue(root: JsonObject, entry: ItemDefinition): String = runCatc
     var group by rememberSaveable { mutableStateOf("全部") }
     var onlySelected by rememberSaveable { mutableStateOf(false) }
     var batch by rememberSaveable(state.packageName, state.catalog?.account) { mutableStateOf("") }
-    val visible = ItemCatalog.entries.filter { (group == "全部" || it.group == group) &&
+    val future = root?.let(ItemEngine::isFuture) == true
+    val entries = remember(root) { if (root != null && future) ItemEngine.existingEntries(root) else ItemCatalog.entries }
+    val quantityGroups = remember(root) { root?.let(ItemDrafts::groupsFor).orEmpty() }
+    val categories = remember(entries) { listOf("全部") + entries.map { it.group }.distinct() }
+    val selectedGroup = group.takeIf { it in categories } ?: "全部"
+    val visible = entries.filter { (selectedGroup == "全部" || it.group == selectedGroup) &&
         (it.label.contains(query, true) || it.key.id.contains(query, true)) && (!onlySelected || choices.isSelected(it.key)) }
     Column(modifier) {
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
@@ -47,14 +52,14 @@ private fun itemValue(root: JsonObject, entry: ItemDefinition): String = runCatc
             } }
             item { Status(state) }
             if (root != null && mode == AssistantMode.QUICK) {
-                item { Panel(title = "快捷操作", help = HelpTopics.items) {
+                if (!future) item { Panel(title = "快捷操作", help = HelpTopics.items) {
                     val actions = choices.actions
                     CheckLine("磁带全部获取至 1", actions.tapes, !state.busy) { update(choices.copy(actions = actions.copy(tapes = it))) }
                     CheckLine("蓝图全部研究", actions.blueprints, !state.busy) { update(choices.copy(actions = actions.copy(blueprints = it))) }
                     CheckLine("补齐设施列表", actions.facilities, !state.busy) { update(choices.copy(actions = actions.copy(facilities = it))) }
                     CheckLine("饰品补齐并充能", actions.jewelry, !state.busy) { update(choices.copy(actions = actions.copy(jewelry = it))) }
                 } }
-                items(ItemDrafts.groups.entries.toList(), key = { "group-${it.key}" }) { (name, entries) -> Panel(title = "$name · ${entries.size} 项", help = HelpTopics.quantity) {
+                items(quantityGroups.entries.toList(), key = { "group-${it.key}" }) { (name, entries) -> Panel(title = "$name · ${entries.size} 项", help = HelpTopics.quantity) {
                     val delta = choices.actions.increments[entries.first().key] ?: 0
                     Text("每项待增加 $delta")
                     Row {
@@ -62,7 +67,7 @@ private fun itemValue(root: JsonObject, entry: ItemDefinition): String = runCatc
                         TextButton({ model.itemGroup(name, true) }, enabled = !state.busy && delta >= 1000) { Text("撤销一次") }
                     }
                 } }
-                items(ItemCatalog.ofKind(ItemKind.AMOUNT), key = { it.key.id }) { entry -> Panel(title = entry.label, help = HelpTopic(entry.label, "${HelpTopics.quantity.text}\n\n物品 ID：${entry.key.field}.${entry.key.id}")) {
+                items(entries.filter { it.kind == ItemKind.AMOUNT }, key = { it.key.id }) { entry -> Panel(title = entry.label, help = HelpTopic(entry.label, "${HelpTopics.quantity.text}\n\n物品 ID：${entry.key.field}.${entry.key.id}")) {
                     Text("当前 ${itemValue(root, entry)}")
                     NumberInput(choices.amountText[entry.key].orEmpty(), "目标数量（留空不改）", !state.busy) {
                         update(choices.copy(amountText = choices.amountText + (entry.key to it)))
@@ -73,8 +78,8 @@ private fun itemValue(root: JsonObject, entry: ItemDefinition): String = runCatc
                 item { Panel(title = "逐项选择", help = HelpTopics.expert) {
                     OutlinedTextField(query, { query = it }, label = { Text("中文名称或内部 ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        (listOf("全部") + ItemCatalog.entries.map { it.group }.distinct()).forEach { name ->
-                            FilterChip(group == name, { group = name }, label = { Text(name) })
+                        categories.forEach { name ->
+                            FilterChip(selectedGroup == name, { group = name }, label = { Text(name) })
                         }
                     }
                     CheckLine("只看已选／已填参数", onlySelected, true) { onlySelected = it }

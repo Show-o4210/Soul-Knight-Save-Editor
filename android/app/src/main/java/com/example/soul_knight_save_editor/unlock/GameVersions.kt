@@ -39,6 +39,12 @@ object GameVersions {
         return games
     }
 
+    fun refreshVersions(games: List<GameCandidate>, versions: Map<String, String?>): List<GameCandidate> =
+        games.map { game ->
+            if (game.packageName !in versions) game
+            else game.copy(version = versions[game.packageName].orEmpty().trim().take(80).ifEmpty { "未知版本" })
+        }
+
     fun encode(games: List<GameCandidate>): String = JsonArray(games.map { game -> buildJsonObject {
         put("package", game.packageName); put("label", game.label); put("version", game.version)
     } }).toString()

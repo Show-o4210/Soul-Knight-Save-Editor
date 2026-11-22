@@ -35,9 +35,12 @@ data class ItemChoices(val actions: ItemSelection = ItemSelection(), val amountT
 
 object ItemDrafts {
     val groups = ItemCatalog.ofKind(ItemKind.QUANTITY).groupBy { it.group }
+    fun groupsFor(root: JsonObject): Map<String, List<ItemDefinition>> =
+        if (ItemEngine.isFuture(root)) ItemEngine.existingEntries(root).groupBy { it.group } else groups
+
     /** Compute all targets first; callers publish the new draft only when every target passes. */
     fun step(root: JsonObject, choices: ItemChoices, group: String, undo: Boolean = false): ItemChoices {
-        val entries = requireNotNull(groups[group]) { "未知数量分类" }
+        val entries = requireNotNull(groupsFor(root)[group]) { "没有可修改的物品，或数量分类未知" }
         val deltas = choices.actions.increments.toMutableMap()
         entries.forEach { entry ->
             val delta = (deltas[entry.key] ?: 0).toLong() + if (undo) -1000 else 1000
@@ -49,6 +52,9 @@ object ItemDrafts {
 }
 
 data class ItemPatch(val bytes: ByteArray, val root: JsonObject, val changes: List<String>)
+
+internal fun JsonElement?.nonNegativeInt(): Int? =
+    (this as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull?.takeIf { it >= 0 }
 
 object ItemCodec {
     private val key = SecretKeySpec(byteArrayOf(105, 97, 109, 98, 111, 0, 0, 0), "DES")
@@ -84,20 +90,27 @@ object ItemCodec {
 }
 
 object ItemEngine {
+    internal fun version(root: JsonObject): Int? =
+        (root["AppVersion"] as? JsonPrimitive)?.takeUnless { it.isString }?.intOrNull
+
+    fun isFuture(root: JsonObject): Boolean = ItemCatalog.isFutureVersion(version(root))
+
+    internal fun existingEntries(root: JsonObject): List<ItemDefinition> = ItemCatalog.entries.filter { entry ->
+        entry.kind == ItemKind.QUANTITY && (entry.key.field == "materials" || entry.key.field == "tokenTickets") &&
+            (root[entry.key.field] as? JsonObject)?.get(entry.key.id).nonNegativeInt() != null
+    }
+
     fun inspect(bytes: ByteArray): JsonObject = ItemCodec.decode(bytes).also { root ->
-        val version = root["AppVersion"] as? JsonPrimitive
-        require(version != null && !version.isString && version.intOrNull in ItemCatalog.SUPPORTED_VERSIONS) {
-            "当前物品目录适配 8.6.0 / 8.7.0；此存档版本未核对，物品功能暂不可用"
+        val version = version(root)
+        require(version in ItemCatalog.SUPPORTED_VERSIONS || ItemCatalog.isFutureVersion(version)) {
+            "当前物品目录适配 ${ItemCatalog.SUPPORTED_VERSION_NAMES}；此存档版本未核对，物品功能暂不可用"
         }
     }
     fun quantity(root: JsonObject, key: ItemKey): Int {
         val field = root[key.field] ?: return 0
         require(field is JsonObject) { "${key.field} 结构未知，暂不修改" }
         val value = field[key.id] ?: return 0
-        val number = value as? JsonPrimitive
-        val amount = number?.takeUnless { it.isString }?.intOrNull
-        require(amount != null && amount >= 0) { "${key.id} 不是非负整数，暂不修改" }
-        return amount
+        return requireNotNull(value.nonNegativeInt()) { "${key.id} 不是非负整数，暂不修改" }
     }
     fun edit(bytes: ByteArray, selection: ItemSelection): ItemPatch {
         require(selection.hasChanges) { "请先选择物品操作" }
@@ -105,6 +118,15 @@ object ItemEngine {
         selection.selected.forEach { key -> require(ItemCatalog.byKey[key]?.kind in setOf(ItemKind.TAPE, ItemKind.BLUEPRINT, ItemKind.FACILITY, ItemKind.JEWELRY)) { "不支持该物品的解锁操作" } }
         fun chosen(kind: ItemKind, all: Boolean) = ItemCatalog.ofKind(kind).filter { all || it.key in selection.selected }
         val original = inspect(bytes)
+        if (isFuture(original)) {
+            require(!(selection.tapes || selection.blueprints || selection.facilities || selection.jewelry) && selection.selected.isEmpty()) {
+                "新版存档目前只支持修改已有的已知材料和兑换券"
+            }
+            val allowed = existingEntries(original).map { it.key }.toSet()
+            require((selection.increments.keys + selection.amounts.keys).all { it in allowed }) {
+                "新版存档中的所选物品缺少已知有效的数量记录，暂不修改"
+            }
+        }
         val result = original.toMutableMap()
         val changes = mutableListOf<String>()
         fun objectField(field: String): MutableMap<String, JsonElement> {

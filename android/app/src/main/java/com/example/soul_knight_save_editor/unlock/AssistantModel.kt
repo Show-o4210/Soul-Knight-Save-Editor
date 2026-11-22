@@ -1,6 +1,7 @@
 package com.example.soul_knight_save_editor.unlock
 
 import android.app.Application
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -365,6 +366,26 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         settings.edit().putString("knownGameVersions", GameVersions.encode(games)).apply()
         state = state.copy(knownGames = games)
     }
+    suspend fun refreshGameVersions() {
+        val packages = state.knownGames.map { it.packageName }
+        val manager = getApplication<Application>().packageManager
+        val versions = withContext(Dispatchers.IO) {
+            packages.associateWith { pkg ->
+                try {
+                    manager.getPackageInfo(pkg, 0).versionName
+                } catch (_: PackageManager.NameNotFoundException) {
+                    null
+                } catch (_: SecurityException) {
+                    null
+                }
+            }
+        }
+        val games = GameVersions.refreshVersions(state.knownGames, versions)
+        if (games != state.knownGames) {
+            settings.edit().putString("knownGameVersions", GameVersions.encode(games)).apply()
+            state = state.copy(knownGames = games)
+        }
+    }
     fun discover() {
         if (state.busy) return
         searchCancelled.set(false)
@@ -468,6 +489,7 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
         val report = withContext(Dispatchers.Default) { SaveInspector.inspect(snapshot, account, dataMode) }
         val characters = report.characters
         val items = report.items
+        val future = items.getOrNull()?.let(ItemEngine::isFuture) == true
         val pets = report.pets
         val weapons = report.weapons.map { states -> WeaponInfo(states.size, states.count { it.missing }) }
         val weaponSkins = report.weaponSkins
@@ -494,9 +516,13 @@ class AssistantModel(application: Application) : AndroidViewModel(application) {
             petMessage = if (pets.isFailure) pets.exceptionOrNull()?.message ?: "宠物读取失败"
                 else if (pets.getOrThrow().isEmpty()) "这个存档暂时没有可修改的宠物。" else "可修改 ${pets.getOrThrow().size} 只宠物。",
             choices = if (clearDrafts) ModeChoices() else state.choices, itemRoot = items.getOrNull(), itemChoices = if (clearDrafts) ItemChoices() else state.itemChoices,
-            itemMessage = if (items.isSuccess) "物品已就绪。" else items.exceptionOrNull()?.message ?: "物品读取失败",
+            itemMessage = items.fold({ root ->
+                if (future) "新版存档：可修改 ${ItemEngine.existingEntries(root).size} 项已有的已知材料和兑换券。" else "物品已就绪。"
+            }, { it.message ?: "物品读取失败" }),
             weaponInfo = weapons.getOrNull(),
-            weaponMessage = weapons.fold({ "可修改 ${it.total} 把武器的获取次数。" }, { it.message ?: "武器获取次数读取失败" }),
+            weaponMessage = weapons.fold({
+                if (future) "新版存档：可修改 ${it.total} 把已知武器的已有获取次数。" else "可修改 ${it.total} 把武器的获取次数。"
+            }, { it.message ?: "武器获取次数读取失败" }),
             weaponSkinInventory = weaponSkins.getOrNull(),
             weaponSkinMessage = weaponSkins.fold({ "已核对 ${it.states.sumOf { state -> state.skins.size }} 个皮肤 · ${it.states.size} 把武器。" },
                 { it.message ?: "武器皮肤读取失败" }),

@@ -144,13 +144,21 @@ object EditEngine {
         if (items.hasChanges || mythic.hasChanges) {
             val file = requireNotNull(item(selectedSnapshot, account))
             val itemRoot = ItemCodec.decode(outputs[file.path] ?: file.bytes)
+            val future = ItemEngine.isFuture(itemRoot)
             // Apply increments once against the preferred shard. Existing companion encodings
             // receive the resulting amounts, rather than adding to their possibly stale counts.
             val companionSelection = items.copy(increments = emptyMap(), amounts = items.amounts +
                 items.increments.keys.associateWith { ItemEngine.quantity(itemRoot, it) })
             fun patchCompanion(bytes: ByteArray): ByteArray {
                 var result = bytes
-                if (items.hasChanges) result = ItemEngine.edit(result, companionSelection).bytes
+                if (items.hasChanges) {
+                    val companionRoot = ItemCodec.decode(bytes)
+                    val selection = if (future || ItemEngine.isFuture(companionRoot)) {
+                        val existing = ItemEngine.existingEntries(companionRoot).map { it.key }.toSet()
+                        ItemSelection(amounts = companionSelection.amounts.filterKeys { it in existing })
+                    } else companionSelection
+                    if (selection.hasChanges) result = ItemEngine.edit(result, selection).bytes
+                }
                 if (mythic.hasChanges) result = MythicEngine.edit(result, mythic).bytes
                 return result
             }
@@ -192,12 +200,19 @@ object EditEngine {
             outputs[file.path] = patch.bytes
             changes += patch.changes
             val resultingCounters = patch.root.getValue("object2ObtainTime").jsonObject
-            val selected = if (weapons.allPlusEight) resultingCounters.keys.filter(WeaponCatalog::isWeaponId).toSet()
-                else weapons.increments.filterValues { it > 0 }.keys
+            val selected = if (weapons.allPlusEight) patch.updatedIds.filter(WeaponCatalog::isWeaponId).toSet()
+                else patch.updatedIds
             selectedSnapshot.statistics.filter { statisticAccount(it.path) == account && it.path != file.path }.forEach { companion ->
-                val root = WeaponEngine.inspect(companion.bytes, item.bytes)
+                val matchingItem = selectedSnapshot.items.firstOrNull {
+                    itemAccount(it.path) == account && it.path.endsWith(".new") == companion.path.endsWith(".new")
+                }
+                val inventory = WeaponEngine.inspect(companion.bytes, item.bytes,
+                    restrictToExisting = matchingItem != null && matchingItem.path != item.path &&
+                        ItemEngine.isFuture(ItemCodec.decode(matchingItem.bytes)))
+                val root = inventory.root
                 val counts = root.getValue("object2ObtainTime").jsonObject.toMutableMap()
-                selected.forEach { id ->
+                val targets = if (inventory.existingOnly) selected.intersect(inventory.ids) else selected
+                targets.forEach { id ->
                     val old = counts[id]
                     require(old == null || old is JsonPrimitive && !old.isString && old.intOrNull?.let { it >= 0 } == true) {
                         "$id 的伴随统计记录格式未知，暂不写入"

@@ -13,7 +13,10 @@ data class ItemDefinition(val key: ItemKey, val label: String, val kind: ItemKin
  * This is a versioned allowlist, not a claim to cover every item in the game. */
 object ItemCatalog {
     // Reviewed item schemas; statistic files use the paired item version too.
-    val SUPPORTED_VERSIONS = setOf(80600, 80700)
+    val SUPPORTED_VERSIONS = setOf(80600, 80700, 80800)
+    const val SUPPORTED_VERSION_NAMES = "8.6.0 / 8.7.0 / 8.8.0"
+    private val latestReviewedVersion = SUPPORTED_VERSIONS.max()
+    fun isFutureVersion(version: Int?): Boolean = version != null && version > latestReviewedVersion
     val entries: List<ItemDefinition> = listOf(
         ItemDefinition(ItemKey("materials", "material_tape_airbender_16"), "藏怒燎原", ItemKind.TAPE, "磁带"),
         ItemDefinition(ItemKey("materials", "material_tape_alien"), "超星际旅行", ItemKind.TAPE, "磁带"),

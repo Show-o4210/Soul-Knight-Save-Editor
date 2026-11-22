@@ -2,7 +2,7 @@
 
 《元气骑士》本地存档编辑工具，可修改角色、皮肤、物品与武器数据，支持修改预览、备份和还原。
 
-**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc04/SoulKnightSaveEditor-2.0.5-rc04.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
+**[下载 APK](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases/download/v2.0.5-rc05/SoulKnightSaveEditor-2.0.5-rc05.apk) · [使用教程](docs/help/getting-started.md) · [QQ 交流群](https://qm.qq.com/q/9Sg9mdgarY)**
 
 ## 使用要求
 
@@ -12,11 +12,11 @@
 | --- | --- |
 | 系统 | Android 7.0 及以上 |
 | 存档访问 | 默认使用原生 Root，也可使用通过 Root 启动的 Shizuku；不支持 Shizuku 的 ADB 模式 |
-| 游戏版本 | 适配 8.7.0，保留 8.6.0 支持；其他版本与渠道需单独验证 |
+| 游戏版本 | 支持已核对的 8.6.0、8.7.0、8.8.0。更高版本可编辑存档中已有的已知材料、兑换券和武器获取次数 |
 
-当前 Android 版本：**`2.0.5-rc04`**。下载 `.apk` 文件即可安装，无需配置开发环境；发布页中的 `Source code` 是源码，不是安装包。
+当前 Android 版本为 **`2.0.5-rc05`**。下载 `.apk` 文件即可安装，无需配置开发环境。
 
-本版在“存档 → 当前存档”增加 `.data`／`.data.new` 格式切换，快速、专家模式分别编辑选中的分片；新格式保留读取开关，还原时也可选择开关处理方式。沿用正式签名，可直接覆盖更新。具体变动见[发布说明](docs/releases/2.0.5-rc04.md)。
+本版适配 8.8.0。打开游戏版本列表时会刷新已保存渠道的安装版本，“加入我们”可前往 GitHub 仓库、QQ 交流群或赞助页面。沿用正式签名，可直接覆盖更新。 [发布说明](docs/releases/2.0.5-rc05.md)
 
 **修改前请先备份原始存档，并保存到助手以外的文件夹。** 从旧 alpha / Debug 包升级时，请先阅读[备份与更新](docs/help/backup-and-update.md)，避免签名不同导致无法覆盖安装。
 
@@ -70,11 +70,11 @@
 
 ## 兼容性与实测情况
 
-当前适配《元气骑士》**8.7.0**，保留 **8.6.0** 支持。下表汇总已有的使用反馈与环境检查，帮助判断自己的游戏渠道和运行环境；**未列出不等于不支持，检查通过也不等于游戏内修改全部生效。**
+当前适配《元气骑士》**8.8.0**，保留 **8.6.0、8.7.0** 支持。下表列出了各渠道和环境实际核对过的功能。
 
 | 项目 | 已有记录 |
 | --- | --- |
-| 游戏渠道 | **vivo 渠道 8.6.0**：用户反馈角色、皮肤解锁成功；**B 站服 8.7.0**：2026-10-23 原生 Root 实测材料修改生效，未选材料保留 |
+| 游戏渠道 | **原版 8.8.0** 的铁矿和武器获取次数已在游戏内确认。**vivo 8.6.0** 有角色与皮肤解锁反馈，**B 站 8.7.0** 已实测材料修改 |
 | 虚拟机 / 模拟器 | **Android 9 虚拟机**：完成 B 站 8.7 材料实际写回与游戏内核对；**光速 Android 7.1.2**：rc03 普通 Root 读取通过；rc02 另有 Shizuku Root 读取记录，未验收真实游戏写回 |
 | 武器进化与神话武器 | **2026-10-23**，维护者确认在虚拟机验收通过；其他条目和设备渠道继续收集反馈，详见[2.0.5-rc02 说明](docs/releases/2.0.5-rc02.md) |
 | Root 方式 | **Pixel 6 / Android 16 / Magisk**：rc03 正式界面读取与刷新通过，48 份存档相关文件哈希未变；历史两通道测试文件读写、备份与恢复检查保留 |
@@ -90,7 +90,7 @@
 | 备份、还原与安装更新 | [备份与更新](docs/help/backup-and-update.md) |
 | 自由编辑文件 | [自由编辑](docs/help/free-editing.md) · [图文教程](docs/help/getting-started.md#free-editing) |
 | 游戏版本与存档读取 | [版本选择](docs/help/game-versions.md) · [本地读取](docs/help/local-data-reading.md) |
-| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc04.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
+| 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc05.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
 | 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) |
 | Python 桌面版 | [使用说明](desktop/README.md)，功能与 Android 版分别维护 |
 

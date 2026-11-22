@@ -26,26 +26,32 @@ import androidx.compose.ui.unit.dp
     val candidate = state.knownGames.firstOrNull { it.packageName == state.packageName }
     val label = if (state.packageName == GameVersions.ORIGINAL) "元气骑士 · 原版（默认）"
         else candidate?.label?.takeUnless { it == state.packageName } ?: "已保存的渠道版本"
-    if (switching) AlertDialog(onDismissRequest = { switching = false },
-        title = { Text("切换游戏版本") },
-        text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("原版始终保留。切换后只读取所选包名，不合并不同版本的存档。", style = MaterialTheme.typography.bodySmall)
-            state.knownGames.forEach { game ->
-                Row(Modifier.fillMaxWidth().selectable(selected = game.packageName == state.packageName,
-                    enabled = !state.busy && state.pending.isEmpty(), role = Role.RadioButton,
-                    onClick = { model.packageName(game.packageName); switching = false })
-                    .testTag("saved-game-${game.packageName}").padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = game.packageName == state.packageName, onClick = null)
-                    Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                        Text(if (game.packageName == GameVersions.ORIGINAL) "元气骑士 · 原版（默认）"
-                            else game.label.takeUnless { it == game.packageName } ?: "自定义渠道",
-                            fontWeight = FontWeight.SemiBold)
-                        Text(game.packageName, style = MaterialTheme.typography.bodySmall)
-                        if (game.version != "未知版本") Text(game.version, style = MaterialTheme.typography.labelSmall)
+    if (switching) {
+        val refreshingVersions by produceState(true, model) {
+            model.refreshGameVersions()
+            value = false
+        }
+        AlertDialog(onDismissRequest = { switching = false },
+            title = { Text("切换游戏版本") },
+            text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("原版始终保留。切换后只读取所选包名，不合并不同版本的存档。", style = MaterialTheme.typography.bodySmall)
+                state.knownGames.forEach { game ->
+                    Row(Modifier.fillMaxWidth().selectable(selected = game.packageName == state.packageName,
+                        enabled = !state.busy && state.pending.isEmpty(), role = Role.RadioButton,
+                        onClick = { model.packageName(game.packageName); switching = false })
+                        .testTag("saved-game-${game.packageName}").padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = game.packageName == state.packageName, onClick = null)
+                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text(if (game.packageName == GameVersions.ORIGINAL) "元气骑士 · 原版（默认）"
+                                else game.label.takeUnless { it == game.packageName } ?: "自定义渠道",
+                                fontWeight = FontWeight.SemiBold)
+                            Text(game.packageName, style = MaterialTheme.typography.bodySmall)
+                            if (!refreshingVersions && game.version != "未知版本") Text(game.version, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
-            }
-        } }, confirmButton = { TextButton({ switching = false }) { Text("关闭") } })
+            } }, confirmButton = { TextButton({ switching = false }) { Text("关闭") } })
+    }
     LazyColumn(modifier.testTag("saves-list"), verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 14.dp)) {
         item { Panel(title = "本地存档", help = HelpTopics.saves) {
             Text(label, fontWeight = FontWeight.SemiBold)

@@ -129,7 +129,7 @@ object WeaponEvolutionCatalog {
         WeaponEvolutionDefinition("weapon_378", "激裂", 80700),
     )
     fun forVersion(version: Int): List<WeaponEvolutionDefinition> {
-        require(version in setOf(80600, 80700)) { "武器进化目录仅适配 8.6.0 / 8.7.0" }
+        require(version in ItemCatalog.SUPPORTED_VERSIONS) { "现有武器进化目录适配 ${ItemCatalog.SUPPORTED_VERSION_NAMES}" }
         return entries.filter { it.minVersion <= version }
     }
 }
@@ -172,7 +172,7 @@ object MythicCatalog {
         MythicDefinition(27, "玄铁重剑"),
     )
     fun forVersion(version: Int): List<MythicDefinition> {
-        require(version in setOf(80600, 80700)) { "神话武器目录仅适配 8.6.0 / 8.7.0" }
+        require(version in ItemCatalog.SUPPORTED_VERSIONS) { "现有神话武器目录适配 ${ItemCatalog.SUPPORTED_VERSION_NAMES}" }
         return entries
     }
 }
