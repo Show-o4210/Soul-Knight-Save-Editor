@@ -2,38 +2,43 @@
 
 [项目首页](../../README.md) · [用户帮助](../help/README.md) · [文档总索引](../README.md)
 
-这里保留实现规则、构建与验证记录。普通用户先看图文教学；开发档案中的 alpha、候选状态对应当时版本，不应拿来判断当前发布状态。
+本目录及相邻文档记录当前实现、构建方式和历史技术决策。**当前发布基线是 Android 2.0.5-rc05 / versionCode 30**；旧 alpha、dev 和 rc 文档只描述当时状态，不作为当前实现依据。
 
-## 当前实现与构建
+## 当前维护入口
 
-- [Android 实现、构建与私有样本测试](android-implementation.md)
+- [Android 当前实现与构建](android-implementation.md)
+- [开发状态、验证证据与未验收范围](../development-status.md)
+- [已知问题与待验证范围](../known-issues.md)
 - [正式签名与证书](../android-signing.md)
-- [开发状态与未验收范围](../development-status.md)
-- [2.0.5-rc03 正式发布：Magisk 读取备用与渠道查找隔离](../releases/2.0.5-rc03.md)
-- [2.0.5-rc02：武器进化与存档兼容修复](../releases/2.0.5-rc02.md)
-- [普通武器进化与神话武器：目录、字段和上限依据](../weapon-upgrades-8.7.0.md)
-- [2.0.4-rc01 正式发布与模拟器测试记录](../releases/2.0.4-rc01.md)
-- [8.7.0 现有功能适配（已纳入 rc01）](../compatibility-8.7.0.md)
-- [武器皮肤目录、索引与编辑（已纳入 rc01）](../weapon-skins-8.7.0.md)
-- [Root / Shizuku 文件与事务验证（2026-10-09）](../root-shizuku-validation.md)
-- [Python 桌面工程](../../desktop/README.md)
+- [2.0.5-rc05 发布说明](../releases/2.0.5-rc05.md)
+- [文档维护规则](../documentation-policy.md)
 
-## 规则与调查档案
+## 当前数据规则与调查依据
 
 | 主题 | 文档 |
 | --- | --- |
-| 来源识别、编辑与事务 API | [alpha12 核心实现](../core-api-alpha12.md) |
-| 物品目录、增量与排除项 | [alpha06 历史物品规则](../quick-items-alpha06.md) · [2.0.5 目录补充记录](../releases/2.0.5-rc01.md)（分类按钮与专家扩展见 alpha12） |
-| 渠道发现与页面导航 | [alpha07 记录](../navigation-discovery-alpha07.md) |
-| 宠物键与映射 | [alpha08 规则](../quick-pets-alpha08.md) · [8.6.0 映射](../pet-mapping-8.6.0.md) |
-| 武器获取次数与其他锻造资格 | [alpha11 规则](../quick-weapons-alpha11.md) · [8.6.0 调查](../weapon-forge-investigation-8.6.0.md) · [高编号名称映射](../weapon-high-id-name-map-8.6.0.md) |
-| 固定路径刷新与界面说明 | [alpha13 体验记录](../experience-alpha13.md) |
-| 标题与彩蛋 | [alpha14 记录](../header-easter-egg-alpha14.md) |
-| vivo 账号格式与已测范围 | [2.0.1-rc01 适配档案](../vivo-channel-2.0.1-rc01.md) |
+| 武器进化与神话武器 | [目录、字段和等级依据](../weapon-upgrades-8.7.0.md) |
+| 武器皮肤 | [皮肤目录、索引与编辑规则](../weapon-skins-8.7.0.md) |
+| 角色重新锁定 | [原锁值来源与限制](../character-relocking.md) |
+| vivo 账号格式 | [vivo 8.6.0 适配档案](../vivo-channel-2.0.1-rc01.md) |
+| Root / Shizuku | [实现与专项验证记录](../root-shizuku-validation.md) |
 
-## 历史计划与发布
+## 历史实现与调查档案
 
-- [正式版 V1 计划](../formal-v1-development-plan.md) · [2.0.0 发布准备记录](../release-2.0.0.md)
-- 发布说明：[2.0.0](../releases/2.0.0.md) · [2.0.1-rc01](../releases/2.0.1-rc01.md) · [2.0.2](../releases/2.0.2.md) · [2.0.3](../releases/2.0.3.md) · [2.0.4-rc01](../releases/2.0.4-rc01.md) · [2.0.5-rc02](../releases/2.0.5-rc02.md) · [2.0.5-rc03](../releases/2.0.5-rc03.md)
+以下文档保留早期设计依据。涉及当前行为时，先以当前实现说明和开发状态为准，再把历史文档作为背景材料。
 
-所有测试结论按文件注明的日期、设备、样本和执行范围理解。合成文件、离线计算或构建通过，不等于真实游戏效果已经验收。
+- 核心 API 与业务草稿：[alpha12](../core-api-alpha12.md)
+- 固定路径刷新与界面体验：[alpha13](../experience-alpha13.md)
+- 标题与彩蛋：[alpha14](../header-easter-egg-alpha14.md)
+- 渠道发现：[alpha07](../navigation-discovery-alpha07.md)
+- 物品目录：[alpha06](../quick-items-alpha06.md)
+- 宠物映射：[alpha08](../quick-pets-alpha08.md) · [8.6.0 映射](../pet-mapping-8.6.0.md)
+- 武器获取次数：[alpha11 规则](../quick-weapons-alpha11.md) · [8.6.0 调查](../weapon-forge-investigation-8.6.0.md) · [高编号名称映射](../weapon-high-id-name-map-8.6.0.md)
+- [Android 正式版 V1 历史计划](../formal-v1-development-plan.md)
+- [2.0.0 发布准备历史记录](../release-2.0.0.md)
+
+## 历史发布说明
+
+[2.0.0](../releases/2.0.0.md) · [2.0.1-rc01](../releases/2.0.1-rc01.md) · [2.0.2](../releases/2.0.2.md) · [2.0.3](../releases/2.0.3.md) · [2.0.4-rc01](../releases/2.0.4-rc01.md) · [2.0.5-rc01](../releases/2.0.5-rc01.md) · [2.0.5-rc02](../releases/2.0.5-rc02.md) · [2.0.5-rc03](../releases/2.0.5-rc03.md) · [2.0.5-rc04](../releases/2.0.5-rc04.md) · [2.0.5-rc05](../releases/2.0.5-rc05.md)
+
+测试结论必须结合对应文件注明的日期、设备、渠道、样本和操作范围理解。构建成功、合成文件测试或离线预览通过，不等于真实游戏效果已经验收。

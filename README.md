@@ -44,7 +44,7 @@
 | 武器进化与神话武器 | 普通武器进化；神话武器解锁、升级至 3 级 |
 | 备份与还原 | 手动 / 自动备份、ZIP 导入、原件还原和重命名；默认不限数量，可设置保留上限 |
 
-可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步。支持 `.data.new` 的扫描、备份与读写，以及 B 站服读取开关的账号绑定，详见[2.0.5-rc02 说明](docs/releases/2.0.5-rc02.md)。
+可用功能受存档内容和版本适配范围限制，具体见[功能说明](docs/help/features.md)。本工具不提供游戏登录或云存档同步。支持 `.data.new` 的扫描、备份与读写，以及 B 站服读取开关的账号绑定，详见[存档格式切换说明](docs/releases/2.0.5-rc04.md)及[当前发布说明](docs/releases/2.0.5-rc05.md)。
 
 ### 第一次使用
 
@@ -80,7 +80,7 @@
 | Root 方式 | **Pixel 6 / Android 16 / Magisk**：rc03 正式界面读取与刷新通过，48 份存档相关文件哈希未变；历史两通道测试文件读写、备份与恢复检查保留 |
 | Android 系统 | 已有 **Android 7.1.2** 读取、**Android 9** 真实存档修改与 **Android 16** Pixel 6 实际存档读取／刷新记录；Android 7.0 及以上为最低要求，不代表每个版本均已实测 |
 
-以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[版本发布说明](docs/releases/2.0.5-rc03.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
+以上记录的测试范围并不相同。需要具体设备、测试日期、验证步骤和局限说明时，请查看[当前发布说明](docs/releases/2.0.5-rc05.md)、[Root / Shizuku 验证记录](docs/root-shizuku-validation.md)和[vivo 渠道记录](docs/vivo-channel-2.0.1-rc01.md)。
 
 ## 文档与反馈
 
@@ -91,7 +91,7 @@
 | 自由编辑文件 | [自由编辑](docs/help/free-editing.md) · [图文教程](docs/help/getting-started.md#free-editing) |
 | 游戏版本与存档读取 | [版本选择](docs/help/game-versions.md) · [本地读取](docs/help/local-data-reading.md) |
 | 更新内容与验证范围 | [版本发布](https://github.com/Show-o4210/Soul-Knight-Save-Editor/releases) · [本版说明](docs/releases/2.0.5-rc05.md) · [Root 验证](docs/root-shizuku-validation.md) · [vivo 渠道](docs/vivo-channel-2.0.1-rc01.md) |
-| 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) |
+| 构建、实现与开发记录 | [开发文档](docs/development/README.md) · [开发状态](docs/development-status.md) · [已知问题](docs/known-issues.md) |
 | Python 桌面版 | [使用说明](desktop/README.md)，功能与 Android 版分别维护 |
 
 遇到问题可在 [Issues](https://github.com/Show-o4210/Soul-Knight-Save-Editor/issues) 或顶部 QQ 群反馈。请说明助手版本、游戏版本与渠道、设备与系统、Root 方式，以及具体操作和提示。**不要公开上传账号信息或原始存档。**
