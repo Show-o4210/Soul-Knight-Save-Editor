@@ -104,9 +104,11 @@ class NativeRootCommandExecutorTest {
         }
     }
 
-    @Test fun onlyStrictKnownMagiskSuVersionEnablesGlobalParameter() {
-        for (version in listOf("30.7-custom:MAGISKSU", "27.0:MAGISKSU", "30.7-custom:MAGISKSU\nextra",
-            "Magisk", "MAGISK:R", "2.82:SUPERSU", "unknown:MAGISKSU", "", "\n:MAGISKSU")) {
+    @Test fun onlyKnownMagiskSuVersionFormatsEnableGlobalParameter() {
+        for (version in listOf("30.7-custom:MAGISKSU", "27.0:MAGISKSU", "47cc532d-alpha:MAGISKSU",
+            "30.7-custom:MAGISKSU\nextra",
+            "47cg532d-alpha:MAGISKSU", "Magisk", "MAGISK:R", "2.82:SUPERSU",
+            "unknown:MAGISKSU", "", "\n:MAGISKSU")) {
             val fixture = Fixture(ordinaryReply = { command -> when {
                 command.command == "id" -> ok("uid=0(root) gid=0(root)")
                 command.stage == "普通 su 挂载视图目录检查" -> absent()
@@ -115,7 +117,8 @@ class NativeRootCommandExecutorTest {
             } })
             fixture.identity()
             fixture.executor.execute(request())
-            assertEquals(version in setOf("30.7-custom:MAGISKSU", "27.0:MAGISKSU"), fixture.candidates.isNotEmpty())
+            assertEquals(version in setOf("30.7-custom:MAGISKSU", "27.0:MAGISKSU", "47cc532d-alpha:MAGISKSU"),
+                fixture.candidates.isNotEmpty())
         }
     }
 
