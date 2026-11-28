@@ -119,7 +119,9 @@ internal class NativeRootCommandExecutor(
     }
 
     companion object {
-        private val magiskVersion = Regex("[0-9]+(?:\\.[0-9]+)*(?:[-+][A-Za-z0-9._+-]+)?:MAGISKSU")
+        private val magiskVersion = Regex(
+            "(?:[0-9]+(?:\\.[0-9]+)*|[A-Fa-f0-9]{7,40})(?:[-+][A-Za-z0-9._+-]+)?:MAGISKSU"
+        )
         private val sourceReadStages = setOf("读取存档内容", "读取完整性校验", "兼容读取完整性校验",
             "检查 XML 搜索特征", "写回 SHA-256 只读自检", "旧版 SHA-256 兼容自检")
         private fun uidZero(result: RootCommandResult): Boolean = result.exitCode == 0 &&
